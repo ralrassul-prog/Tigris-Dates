@@ -212,7 +212,7 @@ function buildOrderSummaryText(items, totalCents, customerName) {
   }
 
   lines.push(`Total: ${formatUsd(totalCents)}`);
-  lines.push("Payment: Zelle (pay later)");
+  lines.push("Payment: Zelle");
 
   return lines.join("\n");
 }
@@ -264,6 +264,145 @@ function validateCart(items) {
   };
 }
 
+function saveCardCheckoutDraft(sessionId, customerName, phone, notes, cart) {
+  db.prepare(`
+    INSERT INTO card_checkout_drafts (
+      stripe_session_id,
+      customer_name,
+      phone,
+      notes,
+      total_cents,
+      items_json
+    ) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(stripe_session_id) DO UPDATE SET
+      customer_name = excluded.customer_name,
+      phone = excluded.phone,
+      notes = excluded.notes,
+      total_cents = excluded.total_cents,
+      items_json = excluded.items_json
+  `).run(
+    sessionId,
+    customerName,
+    phone,
+    notes,
+    cart.totalCents,
+    JSON.stringify(cart.items.map((item) => ({
+      productId: item.product.id,
+      quantity: item.quantity
+    })))
+  );
+}
+
+function loadCardCheckoutDraft(sessionId) {
+  return db.prepare(`
+    SELECT stripe_session_id, customer_name, phone, notes, total_cents, items_json
+    FROM card_checkout_drafts
+    WHERE stripe_session_id = ?
+  `).get(sessionId);
+}
+
+function deleteCardCheckoutDraft(sessionId) {
+  db.prepare("DELETE FROM card_checkout_drafts WHERE stripe_session_id = ?").run(sessionId);
+}
+
+function createOrderWithItems({
+  customerName,
+  phone,
+  notes,
+  paymentMethod,
+  status,
+  cart,
+  stripeSessionId = null,
+  whatsappLink = null
+}) {
+  let orderResult;
+
+  if (db.hasLegacyUserId) {
+    const insertLegacyOrder = db.prepare(`
+      INSERT INTO orders (
+        user_id,
+        customer_name,
+        admin_seen,
+        total_cents,
+        payment_method,
+        status,
+        address,
+        phone,
+        notes,
+        stripe_session_id,
+        whatsapp_link
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    orderResult = insertLegacyOrder.run(
+      db.guestUserId,
+      customerName,
+      0,
+      cart.totalCents,
+      paymentMethod,
+      status,
+      "",
+      phone,
+      notes,
+      stripeSessionId,
+      whatsappLink
+    );
+  } else {
+    const insertOrder = db.prepare(`
+      INSERT INTO orders (
+        customer_name,
+        admin_seen,
+        total_cents,
+        payment_method,
+        status,
+        address,
+        phone,
+        notes,
+        stripe_session_id,
+        whatsapp_link
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    orderResult = insertOrder.run(
+      customerName,
+      0,
+      cart.totalCents,
+      paymentMethod,
+      status,
+      "",
+      phone,
+      notes,
+      stripeSessionId,
+      whatsappLink
+    );
+  }
+
+  const orderId = Number(orderResult.lastInsertRowid);
+  const insertItem = db.prepare(`
+    INSERT INTO order_items (
+      order_id,
+      product_id,
+      product_name,
+      quantity,
+      unit_price_cents,
+      line_total_cents
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const item of cart.items) {
+    insertItem.run(
+      orderId,
+      item.product.id,
+      item.product.name,
+      item.quantity,
+      item.product.priceCents,
+      item.lineTotalCents
+    );
+  }
+
+  return orderId;
+}
+
 function loadOrderItems(orderId) {
   return db.prepare(`
     SELECT product_id, product_name, quantity, unit_price_cents, line_total_cents
@@ -310,10 +449,59 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), (req,
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
+    const sessionId = String(session.id || "");
+
+    const existingOrder = db.prepare("SELECT id FROM orders WHERE stripe_session_id = ?").get(sessionId);
+    if (existingOrder) {
+      deleteCardCheckoutDraft(sessionId);
+      return res.json({ received: true });
+    }
+
+    const draft = loadCardCheckoutDraft(sessionId);
+    if (draft) {
+      let rawItems;
+      try {
+        rawItems = JSON.parse(draft.items_json);
+      } catch (_error) {
+        deleteCardCheckoutDraft(sessionId);
+        return res.json({ received: true });
+      }
+
+      const cart = validateCart(rawItems);
+      if (cart.error) {
+        deleteCardCheckoutDraft(sessionId);
+        return res.json({ received: true });
+      }
+
+      const persistPaidCardOrder = db.transaction(() => {
+        createOrderWithItems({
+          customerName: draft.customer_name,
+          phone: draft.phone,
+          notes: draft.notes || "",
+          paymentMethod: "card",
+          status: "paid",
+          cart,
+          stripeSessionId: sessionId
+        });
+
+        deleteCardCheckoutDraft(sessionId);
+      });
+
+      persistPaidCardOrder();
+      return res.json({ received: true });
+    }
+
     if (session.metadata && session.metadata.orderId) {
       db.prepare("UPDATE orders SET status = ? WHERE id = ?")
         .run("paid", Number(session.metadata.orderId));
     }
+
+    return res.json({ received: true });
+  }
+
+  if (event.type === "checkout.session.expired") {
+    const session = event.data.object;
+    deleteCardCheckoutDraft(String(session.id || ""));
   }
 
   return res.json({ received: true });
@@ -579,102 +767,19 @@ app.post("/api/orders", async (req, res) => {
     });
   }
 
-  const initialStatus = paymentMethod === "card"
-    ? "awaiting_card_payment"
-    : paymentMethod === "zelle"
+  const initialStatus = paymentMethod === "zelle"
       ? "awaiting_zelle"
       : "awaiting_cash";
-
-  const hasLegacyUserId = db.prepare("PRAGMA table_info(orders)").all()
-    .some((column) => column.name === "user_id");
-
-  let orderResult;
-  if (hasLegacyUserId) {
-    const guestEmail = "guest-checkout@tigris.local";
-    let guest = db.prepare("SELECT id FROM users WHERE email = ?").get(guestEmail);
-    if (!guest) {
-      const insertGuest = db.prepare(
-        "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)"
-      ).run("Guest Checkout", guestEmail, "guest-checkout");
-      guest = { id: Number(insertGuest.lastInsertRowid) };
-    }
-
-    const insertLegacyOrder = db.prepare(`
-      INSERT INTO orders (
-        user_id,
-        customer_name,
-        admin_seen,
-        total_cents,
-        payment_method,
-        status,
-        address,
-        phone,
-        notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    orderResult = insertLegacyOrder.run(
-      guest.id,
-      cleanCustomerName,
-      0,
-      cart.totalCents,
-      paymentMethod,
-      initialStatus,
-      "",
-      cleanPhone,
-      cleanNotes
-    );
-  } else {
-    const insertOrder = db.prepare(`
-      INSERT INTO orders (
-        customer_name,
-        admin_seen,
-        total_cents,
-        payment_method,
-        status,
-        address,
-        phone,
-        notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    orderResult = insertOrder.run(
-      cleanCustomerName,
-      0,
-      cart.totalCents,
-      paymentMethod,
-      initialStatus,
-      "",
-      cleanPhone,
-      cleanNotes
-    );
-  }
-
-  const orderId = Number(orderResult.lastInsertRowid);
-
-  const insertItem = db.prepare(`
-    INSERT INTO order_items (
-      order_id,
-      product_id,
-      product_name,
-      quantity,
-      unit_price_cents,
-      line_total_cents
-    ) VALUES (?, ?, ?, ?, ?, ?)
-  `);
-
-  for (const item of cart.items) {
-    insertItem.run(
-      orderId,
-      item.product.id,
-      item.product.name,
-      item.quantity,
-      item.product.priceCents,
-      item.lineTotalCents
-    );
-  }
-
   if (paymentMethod === "zelle") {
+    const orderId = createOrderWithItems({
+      customerName: cleanCustomerName,
+      phone: cleanPhone,
+      notes: cleanNotes,
+      paymentMethod,
+      status: initialStatus,
+      cart
+    });
+
     const message = buildOrderSummaryText(cart.items, cart.totalCents, cleanCustomerName);
     const whatsappLink = buildWhatsappLink(message);
 
@@ -691,6 +796,15 @@ app.post("/api/orders", async (req, res) => {
   }
 
   if (paymentMethod === "cash") {
+    const orderId = createOrderWithItems({
+      customerName: cleanCustomerName,
+      phone: cleanPhone,
+      notes: cleanNotes,
+      paymentMethod,
+      status: initialStatus,
+      cart
+    });
+
     return res.status(201).json({
       orderId,
       paymentMethod,
@@ -703,12 +817,9 @@ app.post("/api/orders", async (req, res) => {
   try {
     session = await stripe.checkout.sessions.create({
       mode: "payment",
-      success_url: `${baseUrl}/?checkout=success&order=${orderId}`,
-      cancel_url: `${baseUrl}/?checkout=cancelled&order=${orderId}`,
+      success_url: `${baseUrl}/?checkout=success`,
+      cancel_url: `${baseUrl}/?checkout=cancelled`,
       payment_method_types: ["card"],
-      metadata: {
-        orderId: String(orderId)
-      },
       line_items: cart.items.map((item) => ({
         quantity: item.quantity,
         price_data: {
@@ -727,12 +838,11 @@ app.post("/api/orders", async (req, res) => {
     });
   }
 
-  db.prepare("UPDATE orders SET stripe_session_id = ? WHERE id = ?").run(session.id, orderId);
+  saveCardCheckoutDraft(session.id, cleanCustomerName, cleanPhone, cleanNotes, cart);
 
   return res.status(201).json({
-    orderId,
     paymentMethod,
-    status: "awaiting_card_payment",
+    status: "pending_checkout",
     total: formatUsd(cart.totalCents),
     checkoutUrl: session.url
   });

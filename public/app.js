@@ -214,7 +214,7 @@ document.querySelectorAll("input[name='paymentMethod']").forEach((radio) => {
   radio.addEventListener("change", () => {
     const selected = document.querySelector("input[name='paymentMethod']:checked")?.value;
     if (selected === "zelle") {
-      zelleHint.textContent = "Place order now, then send Zelle after confirmation.";
+      zelleHint.textContent = "Send payment by Zelle after you place your order.";
       zelleHint.classList.remove("hidden");
     } else if (selected === "cash") {
       zelleHint.textContent = "Choose Cash if you will pay directly to the seller.";

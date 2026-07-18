@@ -5,7 +5,7 @@ A customer-friendly ordering web app for Medjool dates with:
 - Direct guest checkout (no account required)
 - Product selection for your four box options
 - Credit card checkout (Stripe)
-- Zelle pay-later option
+- Zelle option
 - One-click WhatsApp order message link
 - Owner backend endpoints for order tracking
 
@@ -65,7 +65,7 @@ npm run dev
 
 ## WhatsApp + Zelle Flow
 
-When customer chooses **Zelle (pay later)**:
+When customer chooses **Zelle**:
 
 - Order is created with status `awaiting_zelle`
 - App shows your Zelle recipient value

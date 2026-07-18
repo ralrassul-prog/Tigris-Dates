@@ -47,6 +47,16 @@ CREATE TABLE IF NOT EXISTS order_items (
   line_total_cents INTEGER NOT NULL,
   FOREIGN KEY(order_id) REFERENCES orders(id)
 );
+
+CREATE TABLE IF NOT EXISTS card_checkout_drafts (
+  stripe_session_id TEXT PRIMARY KEY,
+  customer_name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  notes TEXT,
+  total_cents INTEGER NOT NULL,
+  items_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 const orderColumns = db.prepare("PRAGMA table_info(orders)").all();
