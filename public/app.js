@@ -233,18 +233,48 @@ loadProducts().catch((error) => {
 
 const currentUrl = new URL(window.location.href);
 const checkoutStatus = currentUrl.searchParams.get("checkout");
-if (checkoutStatus === "success") {
-  orderMessage.style.color = "#0f766e";
-  orderMessage.textContent = "Card payment successful. Thank you for your order!";
-} else if (checkoutStatus === "cancelled") {
-  orderMessage.textContent = "Card payment was cancelled. You can try again.";
-} else {
-  orderMessage.textContent = "";
+const checkoutSessionId = currentUrl.searchParams.get("session_id");
+
+async function finalizeCardCheckout(sessionId) {
+  const data = await api("/api/orders/confirm-card-session", {
+    method: "POST",
+    body: JSON.stringify({ sessionId })
+  });
+
+  return data;
 }
 
-if (checkoutStatus) {
-  currentUrl.searchParams.delete("checkout");
-  currentUrl.searchParams.delete("order");
-  const nextUrl = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
-  window.history.replaceState({}, document.title, nextUrl);
+async function handleCheckoutStatus() {
+  if (checkoutStatus === "success") {
+    orderMessage.style.color = "#0f766e";
+    orderMessage.textContent = "Card payment successful. Finalizing your order...";
+
+    if (checkoutSessionId) {
+      try {
+        const data = await finalizeCardCheckout(checkoutSessionId);
+        orderMessage.textContent = data.alreadyConfirmed
+          ? "Card payment successful. Your order is already confirmed."
+          : `Card payment successful. Order #${data.orderId} is confirmed.`;
+      } catch (error) {
+        orderMessage.style.color = "#a61b1b";
+        orderMessage.textContent = "Payment succeeded, but order confirmation is still processing. Please refresh admin in a moment.";
+      }
+    } else {
+      orderMessage.textContent = "Card payment successful. Thank you for your order!";
+    }
+  } else if (checkoutStatus === "cancelled") {
+    orderMessage.textContent = "Card payment was cancelled. You can try again.";
+  } else {
+    orderMessage.textContent = "";
+  }
+
+  if (checkoutStatus) {
+    currentUrl.searchParams.delete("checkout");
+    currentUrl.searchParams.delete("order");
+    currentUrl.searchParams.delete("session_id");
+    const nextUrl = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+    window.history.replaceState({}, document.title, nextUrl);
+  }
 }
+
+handleCheckoutStatus();

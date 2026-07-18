@@ -403,6 +403,65 @@ function createOrderWithItems({
   return orderId;
 }
 
+function persistPaidCardOrderFromDraft(sessionId) {
+  const normalizedSessionId = String(sessionId || "").trim();
+  if (!normalizedSessionId) {
+    return { created: false, reason: "invalid_session_id" };
+  }
+
+  const existingOrder = db.prepare("SELECT id FROM orders WHERE stripe_session_id = ?").get(normalizedSessionId);
+  if (existingOrder) {
+    deleteCardCheckoutDraft(normalizedSessionId);
+    return {
+      created: false,
+      alreadyConfirmed: true,
+      orderId: Number(existingOrder.id)
+    };
+  }
+
+  const draft = loadCardCheckoutDraft(normalizedSessionId);
+  if (!draft) {
+    return { created: false, reason: "draft_not_found" };
+  }
+
+  let rawItems;
+  try {
+    rawItems = JSON.parse(draft.items_json);
+  } catch (_error) {
+    deleteCardCheckoutDraft(normalizedSessionId);
+    return { created: false, reason: "invalid_draft_json" };
+  }
+
+  const cart = validateCart(rawItems);
+  if (cart.error) {
+    deleteCardCheckoutDraft(normalizedSessionId);
+    return { created: false, reason: "invalid_draft_items" };
+  }
+
+  let createdOrderId = 0;
+  const persistPaidCardOrder = db.transaction(() => {
+    createdOrderId = createOrderWithItems({
+      customerName: draft.customer_name,
+      phone: draft.phone,
+      notes: draft.notes || "",
+      paymentMethod: "card",
+      status: "paid",
+      cart,
+      stripeSessionId: normalizedSessionId
+    });
+
+    deleteCardCheckoutDraft(normalizedSessionId);
+  });
+
+  persistPaidCardOrder();
+
+  return {
+    created: true,
+    alreadyConfirmed: false,
+    orderId: Number(createdOrderId)
+  };
+}
+
 function loadOrderItems(orderId) {
   return db.prepare(`
     SELECT product_id, product_name, quantity, unit_price_cents, line_total_cents
@@ -450,46 +509,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), (req,
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     const sessionId = String(session.id || "");
-
-    const existingOrder = db.prepare("SELECT id FROM orders WHERE stripe_session_id = ?").get(sessionId);
-    if (existingOrder) {
-      deleteCardCheckoutDraft(sessionId);
-      return res.json({ received: true });
-    }
-
-    const draft = loadCardCheckoutDraft(sessionId);
-    if (draft) {
-      let rawItems;
-      try {
-        rawItems = JSON.parse(draft.items_json);
-      } catch (_error) {
-        deleteCardCheckoutDraft(sessionId);
-        return res.json({ received: true });
-      }
-
-      const cart = validateCart(rawItems);
-      if (cart.error) {
-        deleteCardCheckoutDraft(sessionId);
-        return res.json({ received: true });
-      }
-
-      const persistPaidCardOrder = db.transaction(() => {
-        createOrderWithItems({
-          customerName: draft.customer_name,
-          phone: draft.phone,
-          notes: draft.notes || "",
-          paymentMethod: "card",
-          status: "paid",
-          cart,
-          stripeSessionId: sessionId
-        });
-
-        deleteCardCheckoutDraft(sessionId);
-      });
-
-      persistPaidCardOrder();
-      return res.json({ received: true });
-    }
+    persistPaidCardOrderFromDraft(sessionId);
 
     if (session.metadata && session.metadata.orderId) {
       db.prepare("UPDATE orders SET status = ? WHERE id = ?")
@@ -508,6 +528,51 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), (req,
 });
 
 app.use(express.json());
+
+app.post("/api/orders/confirm-card-session", async (req, res) => {
+  const sessionId = String(req.body?.sessionId || "").trim();
+  if (!sessionId) {
+    return res.status(400).json({ error: "sessionId is required." });
+  }
+
+  if (!stripe) {
+    return res.status(503).json({ error: "Card checkout is not configured." });
+  }
+
+  let session;
+  try {
+    session = await stripe.checkout.sessions.retrieve(sessionId);
+  } catch (error) {
+    return res.status(400).json({ error: "Invalid Stripe checkout session." });
+  }
+
+  if (session.mode !== "payment") {
+    return res.status(400).json({ error: "Unsupported checkout session mode." });
+  }
+
+  if (session.payment_status !== "paid") {
+    return res.status(409).json({ error: "Card payment is not completed yet." });
+  }
+
+  const result = persistPaidCardOrderFromDraft(sessionId);
+  if (result.reason === "draft_not_found" && !result.alreadyConfirmed) {
+    return res.status(404).json({
+      error: "No pending order draft was found for this checkout session."
+    });
+  }
+
+  if (!result.created && !result.alreadyConfirmed) {
+    return res.status(422).json({
+      error: "Unable to finalize this card order."
+    });
+  }
+
+  return res.json({
+    message: result.alreadyConfirmed ? "Order already confirmed." : "Card order confirmed.",
+    alreadyConfirmed: Boolean(result.alreadyConfirmed),
+    orderId: result.orderId
+  });
+});
 
 app.get("/api/admin/session", (req, res) => {
   return res.json({ authenticated: isValidAdminSession(parseCookies(req)[ADMIN_SESSION_COOKIE]) });
@@ -817,7 +882,7 @@ app.post("/api/orders", async (req, res) => {
   try {
     session = await stripe.checkout.sessions.create({
       mode: "payment",
-      success_url: `${baseUrl}/?checkout=success`,
+      success_url: `${baseUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/?checkout=cancelled`,
       payment_method_types: ["card"],
       line_items: cart.items.map((item) => ({
