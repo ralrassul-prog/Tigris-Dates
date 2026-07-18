@@ -32,7 +32,7 @@ services:
         sync: false
       - key: ZELLE_PAYEE
         sync: false
-    disks:
-      - name: tigris-dates-data
-        mountPath: /opt/render/project/src/data
-        sizeGB: 1
+    disk:
+      name: tigris-dates-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
