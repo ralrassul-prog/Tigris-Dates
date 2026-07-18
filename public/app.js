@@ -231,10 +231,20 @@ loadProducts().catch((error) => {
   orderMessage.textContent = error.message;
 });
 
-const checkoutStatus = new URLSearchParams(window.location.search).get("checkout");
+const currentUrl = new URL(window.location.href);
+const checkoutStatus = currentUrl.searchParams.get("checkout");
 if (checkoutStatus === "success") {
   orderMessage.style.color = "#0f766e";
   orderMessage.textContent = "Card payment successful. Thank you for your order!";
 } else if (checkoutStatus === "cancelled") {
   orderMessage.textContent = "Card payment was cancelled. You can try again.";
+} else {
+  orderMessage.textContent = "";
+}
+
+if (checkoutStatus) {
+  currentUrl.searchParams.delete("checkout");
+  currentUrl.searchParams.delete("order");
+  const nextUrl = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+  window.history.replaceState({}, document.title, nextUrl);
 }
