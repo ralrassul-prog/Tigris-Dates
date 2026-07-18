@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tigris Dates Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="background-glow"></div>
+
+    <main class="layout">
+      <header class="hero card">
+        <p class="kicker">Owner Backend</p>
+        <h1>Tigris Dates Admin</h1>
+        <p>Track incoming orders and update their status.</p>
+      </header>
+
+      <section class="card">
+        <form id="adminForm" class="stacked-form">
+          <label>
+            Admin Password
+            <input id="adminPasswordInput" type="password" placeholder="Enter your admin password" required />
+          </label>
+          <div class="summary-row">
+            <button class="btn primary" type="submit">Sign In</button>
+            <button id="refreshButton" class="btn ghost hidden" type="button">Refresh</button>
+            <button id="logoutButton" class="btn ghost hidden" type="button">Log Out</button>
+          </div>
+          <p id="adminMessage" class="message"></p>
+        </form>
+      </section>
+
+      <div id="adminDashboard" class="stacked-form hidden">
+        <section class="card">
+          <h3>Account</h3>
+          <div id="accountGrid" class="account-grid">
+            <article class="metric-card metric-highlight metric-new-orders">
+              <p class="metric-label">New Orders</p>
+              <p id="newOrdersCount" class="metric-value">0</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-label">Paid</p>
+              <p id="paidTotal" class="metric-value">$0.00</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-label">Not Paid</p>
+              <p id="unpaidTotal" class="metric-value">$0.00</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-label">Paid by Zelle</p>
+              <p id="paidByZelle" class="metric-value">$0.00</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-label">Paid by Card</p>
+              <p id="paidByCard" class="metric-value">$0.00</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-label">Paid by Cash</p>
+              <p id="paidByCash" class="metric-value">$0.00</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-label">Awaiting Zelle</p>
+              <p id="awaitingByZelle" class="metric-value">$0.00</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-label">Awaiting Card</p>
+              <p id="awaitingByCard" class="metric-value">$0.00</p>
+            </article>
+            <article class="metric-card">
+              <p class="metric-label">Awaiting Cash</p>
+              <p id="awaitingByCash" class="metric-value">$0.00</p>
+            </article>
+          </div>
+          <p id="summaryText" class="hint">Not loaded yet.</p>
+        </section>
+
+        <section class="card">
+          <h3>Orders</h3>
+          <div class="tab-row" role="tablist" aria-label="Order tabs">
+            <button id="activeTabButton" class="btn ghost tab-active" type="button" role="tab" aria-selected="true">Active Orders</button>
+            <button id="completedTabButton" class="btn ghost" type="button" role="tab" aria-selected="false">Closed Orders</button>
+          </div>
+          <div id="ordersWrap" class="stacked-form"></div>
+        </section>
+      </div>
+    </main>
+
+    <script src="/admin.js" defer></script>
+  </body>
+</html>
