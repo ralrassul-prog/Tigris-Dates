@@ -699,25 +699,33 @@ app.post("/api/orders", async (req, res) => {
     });
   }
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    success_url: `${baseUrl}/?checkout=success&order=${orderId}`,
-    cancel_url: `${baseUrl}/?checkout=cancelled&order=${orderId}`,
-    payment_method_types: ["card"],
-    metadata: {
-      orderId: String(orderId)
-    },
-    line_items: cart.items.map((item) => ({
-      quantity: item.quantity,
-      price_data: {
-        currency,
-        product_data: {
-          name: item.product.name
-        },
-        unit_amount: item.product.priceCents
-      }
-    }))
-  });
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      success_url: `${baseUrl}/?checkout=success&order=${orderId}`,
+      cancel_url: `${baseUrl}/?checkout=cancelled&order=${orderId}`,
+      payment_method_types: ["card"],
+      metadata: {
+        orderId: String(orderId)
+      },
+      line_items: cart.items.map((item) => ({
+        quantity: item.quantity,
+        price_data: {
+          currency,
+          product_data: {
+            name: item.product.name
+          },
+          unit_amount: item.product.priceCents
+        }
+      }))
+    });
+  } catch (error) {
+    console.error("Stripe checkout session creation failed:", error.message);
+    return res.status(502).json({
+      error: "Card checkout is temporarily unavailable. Verify your live Stripe key and account activation."
+    });
+  }
 
   db.prepare("UPDATE orders SET stripe_session_id = ? WHERE id = ?").run(session.id, orderId);
 
