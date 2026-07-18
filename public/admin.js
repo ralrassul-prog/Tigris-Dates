@@ -255,7 +255,7 @@ function buildOrderCard(order) {
 
     const title = document.createElement("p");
     title.className = "product-meta";
-    title.textContent = `#${order.id} | ${order.customerName} | ${order.total}`;
+    title.textContent = `#${order.id} | ${order.total}`;
 
     const chips = document.createElement("div");
     chips.className = "chip-row";
@@ -290,7 +290,7 @@ function buildOrderCard(order) {
 
     const details = document.createElement("p");
     details.className = "hint";
-    details.textContent = `Phone: ${order.phone} | Created: ${order.createdAt}`;
+    details.textContent = `Name: ${order.customerName} | Phone: ${order.phone} | Created: ${order.createdAt}`;
 
     const items = document.createElement("p");
     items.className = "hint";
