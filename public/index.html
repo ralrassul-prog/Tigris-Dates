@@ -72,6 +72,11 @@
             </label>
           </fieldset>
 
+          <label id="deliveryAddressWrap" class="hidden">
+            Delivery address
+            <input id="deliveryAddressInput" type="text" placeholder="Street address" />
+          </label>
+
           <div class="checkout-row">
             <p id="orderTotal" class="order-breakdown">Subtotal: $0.00
 Delivery: $0.00
@@ -87,6 +92,14 @@ Total due: $0.00</p>
         </form>
       </section>
     </main>
+
+    <dialog id="orderSummaryDialog" class="order-summary-dialog">
+      <div class="stacked-form">
+        <h3>Order Summary</h3>
+        <p id="orderSummaryText" class="hint"></p>
+        <button id="closeSummaryButton" class="btn primary" type="button">Close</button>
+      </div>
+    </dialog>
 
     <script src="/app.js" defer></script>
   </body>

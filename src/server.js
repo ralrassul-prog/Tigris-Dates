@@ -213,11 +213,19 @@ function formatUsd(cents) {
 
 function buildOrderSummaryText(items, totalCents, customerName, options = {}) {
   const deliveryFeeCents = Number(options.deliveryFeeCents || 0);
+  const paymentMethod = String(options.paymentMethod || "").trim();
+  const fulfillmentMethod = String(options.fulfillmentMethod || "pickup").trim();
+  const address = String(options.address || "").trim();
+  const phone = String(options.phone || "").trim();
   const lines = [
     "New Tigris Dates order",
     `Customer: ${customerName}`,
     "Items:"
   ];
+
+  if (phone) {
+    lines.push(`Phone: ${phone}`);
+  }
 
   for (const item of items) {
     lines.push(`- ${item.quantity} x ${item.product.name} (${formatUsd(item.lineTotalCents)})`);
@@ -227,8 +235,19 @@ function buildOrderSummaryText(items, totalCents, customerName, options = {}) {
     lines.push(`Delivery: ${formatUsd(deliveryFeeCents)}`);
   }
 
+  if (fulfillmentMethod === "delivery") {
+    lines.push("Fulfillment: Delivery");
+    if (address) {
+      lines.push(`Address: ${address}`);
+    }
+  } else {
+    lines.push("Fulfillment: Pickup");
+  }
+
   lines.push(`Total: ${formatUsd(totalCents)}`);
-  lines.push("Payment: Zelle");
+  if (paymentMethod) {
+    lines.push(`Payment: ${paymentMethod}`);
+  }
 
   return lines.join("\n");
 }
@@ -312,12 +331,13 @@ function buildPricingBreakdown(subtotalCents, fulfillmentMethod, paymentMethod) 
   };
 }
 
-function saveCardCheckoutDraft(sessionId, customerName, phone, notes, cart, pricing, fulfillmentMethod) {
+function saveCardCheckoutDraft(sessionId, customerName, phone, address, notes, cart, pricing, fulfillmentMethod) {
   db.prepare(`
     INSERT INTO card_checkout_drafts (
       stripe_session_id,
       customer_name,
       phone,
+      address,
       notes,
       subtotal_cents,
       delivery_fee_cents,
@@ -325,10 +345,11 @@ function saveCardCheckoutDraft(sessionId, customerName, phone, notes, cart, pric
       total_cents,
       fulfillment_method,
       items_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(stripe_session_id) DO UPDATE SET
       customer_name = excluded.customer_name,
       phone = excluded.phone,
+      address = excluded.address,
       notes = excluded.notes,
       subtotal_cents = excluded.subtotal_cents,
       delivery_fee_cents = excluded.delivery_fee_cents,
@@ -340,6 +361,7 @@ function saveCardCheckoutDraft(sessionId, customerName, phone, notes, cart, pric
     sessionId,
     customerName,
     phone,
+    address,
     notes,
     pricing.subtotalCents,
     pricing.deliveryFeeCents,
@@ -355,7 +377,7 @@ function saveCardCheckoutDraft(sessionId, customerName, phone, notes, cart, pric
 
 function loadCardCheckoutDraft(sessionId) {
   return db.prepare(`
-    SELECT stripe_session_id, customer_name, phone, notes, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, items_json
+    SELECT stripe_session_id, customer_name, phone, address, notes, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, items_json
     FROM card_checkout_drafts
     WHERE stripe_session_id = ?
   `).get(sessionId);
@@ -368,6 +390,7 @@ function deleteCardCheckoutDraft(sessionId) {
 function createOrderWithItems({
   customerName,
   phone,
+  address = "",
   notes,
   paymentMethod,
   status,
@@ -414,7 +437,7 @@ function createOrderWithItems({
       fulfillmentMethod,
       paymentMethod,
       status,
-      "",
+      address,
       phone,
       notes,
       stripeSessionId,
@@ -450,7 +473,7 @@ function createOrderWithItems({
       fulfillmentMethod,
       paymentMethod,
       status,
-      "",
+      address,
       phone,
       notes,
       stripeSessionId,
@@ -534,12 +557,22 @@ function persistPaidCardOrderFromDraft(sessionId) {
   const fulfillmentMethod = String(draft.fulfillment_method || "pickup").toLowerCase() === "delivery"
     ? "delivery"
     : "pickup";
+  const address = String(draft.address || "").trim();
+  const whatsappSummary = buildOrderSummaryText(cart.items, totalCents, draft.customer_name, {
+    deliveryFeeCents,
+    paymentMethod: "Card",
+    fulfillmentMethod,
+    address,
+    phone: draft.phone
+  });
+  const whatsappLink = buildWhatsappLink(whatsappSummary);
 
   let createdOrderId = 0;
   const persistPaidCardOrder = db.transaction(() => {
     createdOrderId = createOrderWithItems({
       customerName: draft.customer_name,
       phone: draft.phone,
+      address,
       notes: draft.notes || "",
       paymentMethod: "card",
       status: "paid",
@@ -549,6 +582,7 @@ function persistPaidCardOrderFromDraft(sessionId) {
       cardFeeCents,
       totalCents,
       fulfillmentMethod,
+      whatsappLink,
       stripeSessionId: normalizedSessionId
     });
 
@@ -590,9 +624,12 @@ function mapOrderRow(row) {
     total: formatUsd(row.total_cents),
     fulfillmentMethod: row.fulfillment_method || "pickup",
     paymentMethod: row.payment_method,
+    fulfillmentMethod: row.fulfillment_method || "pickup",
     status: row.status,
     phone: row.phone,
+    address: row.address,
     notes: row.notes,
+    whatsappLink: row.whatsapp_link,
     createdAt: row.created_at,
     items: loadOrderItems(row.id)
   };
@@ -676,7 +713,12 @@ app.post("/api/orders/confirm-card-session", async (req, res) => {
   return res.json({
     message: result.alreadyConfirmed ? "Order already confirmed." : "Card order confirmed.",
     alreadyConfirmed: Boolean(result.alreadyConfirmed),
-    orderId: result.orderId
+    orderId: result.orderId,
+    order: mapOrderRow(db.prepare(`
+      SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, address, phone, notes, whatsapp_link, created_at
+      FROM orders
+      WHERE id = ?
+    `).get(result.orderId))
   });
 });
 
@@ -718,7 +760,7 @@ app.get("/api/products", (_req, res) => {
 
 app.get("/api/orders", (_req, res) => {
   const rows = db.prepare(`
-    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, phone, notes, created_at
+    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, address, phone, notes, created_at
     FROM orders
     ORDER BY id DESC
     LIMIT 20
@@ -758,7 +800,7 @@ app.get("/api/admin/orders", requireAdmin, (req, res) => {
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const rows = db.prepare(`
-    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, phone, notes, created_at
+    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, address, phone, notes, created_at
     FROM orders
     ${whereSql}
     ORDER BY id DESC
@@ -778,7 +820,7 @@ app.get("/api/admin/orders/:orderId", requireAdmin, (req, res) => {
   }
 
   const row = db.prepare(`
-    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, phone, notes, created_at
+    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, address, phone, notes, created_at
     FROM orders
     WHERE id = ?
   `).get(orderId);
@@ -810,7 +852,7 @@ app.patch("/api/admin/orders/:orderId/status", requireAdmin, (req, res) => {
   }
 
   const row = db.prepare(`
-    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, phone, notes, created_at
+    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, address, phone, notes, created_at
     FROM orders
     WHERE id = ?
   `).get(orderId);
@@ -833,7 +875,7 @@ app.patch("/api/admin/orders/:orderId/open", requireAdmin, (req, res) => {
   }
 
   const row = db.prepare(`
-    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, phone, notes, created_at
+    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, address, phone, notes, created_at
     FROM orders
     WHERE id = ?
   `).get(orderId);
@@ -911,10 +953,11 @@ app.get("/api/admin/summary", requireAdmin, (_req, res) => {
 });
 
 app.post("/api/orders", async (req, res) => {
-  const { customerName, items, paymentMethod, fulfillmentMethod, phone, notes } = req.body;
+  const { customerName, items, paymentMethod, fulfillmentMethod, phone, address, notes } = req.body;
 
   const cleanCustomerName = String(customerName || "").trim();
   const cleanPhone = String(phone || "").trim();
+  const cleanAddress = String(address || "").trim();
   const cleanNotes = String(notes || "").trim();
 
   if (!cleanCustomerName || !cleanPhone) {
@@ -930,6 +973,10 @@ app.post("/api/orders", async (req, res) => {
   const cleanFulfillmentMethod = String(fulfillmentMethod || "pickup").trim().toLowerCase();
   if (!["pickup", "delivery"].includes(cleanFulfillmentMethod)) {
     return res.status(400).json({ error: "Fulfillment method must be pickup or delivery." });
+  }
+
+  if (cleanFulfillmentMethod === "delivery" && !cleanAddress) {
+    return res.status(400).json({ error: "Delivery address is required for delivery orders." });
   }
 
   const cart = validateCart(items);
@@ -950,9 +997,19 @@ app.post("/api/orders", async (req, res) => {
       : "awaiting_cash";
 
   if (paymentMethod === "zelle") {
+    const whatsappMessage = buildOrderSummaryText(cart.items, pricing.totalCents, cleanCustomerName, {
+      deliveryFeeCents: pricing.deliveryFeeCents,
+      paymentMethod: "Zelle",
+      fulfillmentMethod: cleanFulfillmentMethod,
+      address: cleanAddress,
+      phone: cleanPhone
+    });
+    const whatsappLink = buildWhatsappLink(whatsappMessage);
+
     const orderId = createOrderWithItems({
       customerName: cleanCustomerName,
       phone: cleanPhone,
+      address: cleanAddress,
       notes: cleanNotes,
       paymentMethod,
       status: initialStatus,
@@ -960,15 +1017,9 @@ app.post("/api/orders", async (req, res) => {
       subtotalCents: pricing.subtotalCents,
       deliveryFeeCents: pricing.deliveryFeeCents,
       totalCents: pricing.totalCents,
-      fulfillmentMethod: cleanFulfillmentMethod
+      fulfillmentMethod: cleanFulfillmentMethod,
+      whatsappLink
     });
-
-    const message = buildOrderSummaryText(cart.items, pricing.totalCents, cleanCustomerName, {
-      deliveryFeeCents: pricing.deliveryFeeCents
-    });
-    const whatsappLink = buildWhatsappLink(message);
-
-    db.prepare("UPDATE orders SET whatsapp_link = ? WHERE id = ?").run(whatsappLink, orderId);
 
     return res.status(201).json({
       orderId,
@@ -984,9 +1035,19 @@ app.post("/api/orders", async (req, res) => {
   }
 
   if (paymentMethod === "cash") {
+    const whatsappMessage = buildOrderSummaryText(cart.items, pricing.totalCents, cleanCustomerName, {
+      deliveryFeeCents: pricing.deliveryFeeCents,
+      paymentMethod: "Cash",
+      fulfillmentMethod: cleanFulfillmentMethod,
+      address: cleanAddress,
+      phone: cleanPhone
+    });
+    const whatsappLink = buildWhatsappLink(whatsappMessage);
+
     const orderId = createOrderWithItems({
       customerName: cleanCustomerName,
       phone: cleanPhone,
+      address: cleanAddress,
       notes: cleanNotes,
       paymentMethod,
       status: initialStatus,
@@ -994,7 +1055,8 @@ app.post("/api/orders", async (req, res) => {
       subtotalCents: pricing.subtotalCents,
       deliveryFeeCents: pricing.deliveryFeeCents,
       totalCents: pricing.totalCents,
-      fulfillmentMethod: cleanFulfillmentMethod
+      fulfillmentMethod: cleanFulfillmentMethod,
+      whatsappLink
     });
 
     return res.status(201).json({
@@ -1004,7 +1066,8 @@ app.post("/api/orders", async (req, res) => {
       status: "awaiting_cash",
       subtotal: formatUsd(pricing.subtotalCents),
       deliveryFee: formatUsd(pricing.deliveryFeeCents),
-      total: formatUsd(pricing.totalCents)
+      total: formatUsd(pricing.totalCents),
+      whatsappLink
     });
   }
 
@@ -1067,6 +1130,7 @@ app.post("/api/orders", async (req, res) => {
     session.id,
     cleanCustomerName,
     cleanPhone,
+    cleanAddress,
     cleanNotes,
     cart,
     pricing,

@@ -8,6 +8,11 @@ const orderMessage = document.getElementById("orderMessage");
 const orderTotal = document.getElementById("orderTotal");
 const zelleHint = document.getElementById("zelleHint");
 const whatsappLink = document.getElementById("whatsappLink");
+const deliveryAddressWrap = document.getElementById("deliveryAddressWrap");
+const deliveryAddressInput = document.getElementById("deliveryAddressInput");
+const orderSummaryDialog = document.getElementById("orderSummaryDialog");
+const orderSummaryText = document.getElementById("orderSummaryText");
+const closeSummaryButton = document.getElementById("closeSummaryButton");
 const submitButton = orderForm.querySelector("button[type='submit']");
 const DELIVERY_FEE_CENTS = 500;
 const CARD_FEE_PERCENT = 0.029;
@@ -140,6 +145,55 @@ function updateTotal() {
   orderTotal.textContent = lines.join("\n");
 }
 
+function getItemName(productId) {
+  const product = state.products.find((entry) => entry.id === productId);
+  return product ? product.name : productId;
+}
+
+function openSummaryDialog(text) {
+  if (!text) {
+    return;
+  }
+
+  if (orderSummaryDialog && typeof orderSummaryDialog.showModal === "function") {
+    orderSummaryText.textContent = text;
+    if (!orderSummaryDialog.open) {
+      orderSummaryDialog.showModal();
+    }
+    return;
+  }
+
+  window.alert(text);
+}
+
+function buildSummaryText({ itemsText, paymentLabel, fulfillmentMethod, address, totalText }) {
+  const lines = [
+    "Order placed successfully.",
+    `Items: ${itemsText || "None"}`,
+    `Payment: ${paymentLabel}`,
+    `Fulfillment: ${fulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}`
+  ];
+
+  if (fulfillmentMethod === "delivery" && address) {
+    lines.push(`Address: ${address}`);
+  }
+
+  lines.push(`Total: ${totalText}`);
+  return lines.join("\n");
+}
+
+function updateFulfillmentUI() {
+  const fulfillmentMethod = getSelectedFulfillmentMethod();
+  const isDelivery = fulfillmentMethod === "delivery";
+
+  deliveryAddressWrap.classList.toggle("hidden", !isDelivery);
+  deliveryAddressInput.required = isDelivery;
+
+  if (!isDelivery) {
+    deliveryAddressInput.value = "";
+  }
+}
+
 function renderProducts() {
   productGrid.innerHTML = "";
 
@@ -184,6 +238,8 @@ async function submitOrder(event) {
   submitButton.textContent = "Placing...";
 
   try {
+    const address = deliveryAddressInput.value.trim();
+
     const data = await api("/api/orders", {
       method: "POST",
       body: JSON.stringify({
@@ -192,6 +248,7 @@ async function submitOrder(event) {
         paymentMethod: selectedPayment,
         fulfillmentMethod: selectedFulfillmentMethod,
         phone: document.getElementById("phoneInput").value.trim(),
+        address,
         notes: document.getElementById("notesInput").value.trim()
       })
     });
@@ -206,16 +263,30 @@ async function submitOrder(event) {
     if (selectedPayment === "zelle") {
       orderMessage.textContent = "Your order has been sent. Please pay by Zelle and confirm with the seller. We will process your order as soon as payment is confirmed.";
 
-      if (data.whatsappLink) {
-        whatsappLink.href = data.whatsappLink;
-        whatsappLink.classList.remove("hidden");
-      }
-
       zelleHint.textContent = `Zelle recipient: ${data.zellePayee}`;
       zelleHint.classList.remove("hidden");
     } else if (selectedPayment === "cash") {
       orderMessage.textContent = "Your order has been sent. Please pay cash when you meet the seller. We will process your order right away and confirm details with you.";
     }
+
+    if (data.whatsappLink) {
+      whatsappLink.href = data.whatsappLink;
+      whatsappLink.classList.remove("hidden");
+    }
+
+    const itemsText = items.map((item) => `${item.quantity} x ${getItemName(item.productId)}`).join("; ");
+    const paymentLabel = selectedPayment === "card"
+      ? "Card"
+      : selectedPayment === "zelle"
+        ? "Zelle"
+        : "Cash";
+    openSummaryDialog(buildSummaryText({
+      itemsText,
+      paymentLabel,
+      fulfillmentMethod: selectedFulfillmentMethod,
+      address,
+      totalText: data.total || orderTotal.textContent.split("\n").pop()?.replace("Total due now: ", "").replace("Total due: ", "") || "$0.00"
+    }));
 
     const keepName = document.getElementById("customerNameInput").value;
     const keepPhone = document.getElementById("phoneInput").value;
@@ -290,8 +361,15 @@ document.querySelectorAll("input[name='paymentMethod']").forEach((radio) => {
 
 document.querySelectorAll("input[name='fulfillmentMethod']").forEach((radio) => {
   radio.addEventListener("change", () => {
+    updateFulfillmentUI();
     updateTotal();
   });
+});
+
+closeSummaryButton?.addEventListener("click", () => {
+  if (orderSummaryDialog?.open) {
+    orderSummaryDialog.close();
+  }
 });
 
 orderForm.addEventListener("submit", submitOrder);
@@ -324,6 +402,25 @@ async function handleCheckoutStatus() {
         orderMessage.textContent = data.alreadyConfirmed
           ? "Card payment successful. Your order is already confirmed."
           : `Card payment successful. Order #${data.orderId} is confirmed.`;
+
+        if (data.order?.whatsappLink) {
+          whatsappLink.href = data.order.whatsappLink;
+          whatsappLink.classList.remove("hidden");
+        }
+
+        if (data.order) {
+          const itemsText = (data.order.items || [])
+            .map((item) => `${item.quantity} x ${item.productName}`)
+            .join("; ");
+
+          openSummaryDialog(buildSummaryText({
+            itemsText,
+            paymentLabel: "Card",
+            fulfillmentMethod: data.order.fulfillmentMethod,
+            address: data.order.address,
+            totalText: data.order.total
+          }));
+        }
       } catch (error) {
         orderMessage.style.color = "#a61b1b";
         orderMessage.textContent = "Payment succeeded, but order confirmation is still processing. Please refresh admin in a moment.";
@@ -346,4 +443,5 @@ async function handleCheckoutStatus() {
   }
 }
 
+updateFulfillmentUI();
 handleCheckoutStatus();

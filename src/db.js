@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS card_checkout_drafts (
   stripe_session_id TEXT PRIMARY KEY,
   customer_name TEXT NOT NULL,
   phone TEXT NOT NULL,
+  address TEXT NOT NULL DEFAULT '',
   notes TEXT,
   subtotal_cents INTEGER NOT NULL DEFAULT 0,
   delivery_fee_cents INTEGER NOT NULL DEFAULT 0,
@@ -113,6 +114,7 @@ const hasDraftSubtotalCents = draftColumns.some((col) => col.name === "subtotal_
 const hasDraftDeliveryFeeCents = draftColumns.some((col) => col.name === "delivery_fee_cents");
 const hasDraftCardFeeCents = draftColumns.some((col) => col.name === "card_fee_cents");
 const hasDraftFulfillmentMethod = draftColumns.some((col) => col.name === "fulfillment_method");
+const hasDraftAddress = draftColumns.some((col) => col.name === "address");
 
 if (!hasDraftSubtotalCents) {
   db.exec("ALTER TABLE card_checkout_drafts ADD COLUMN subtotal_cents INTEGER NOT NULL DEFAULT 0");
@@ -129,6 +131,10 @@ if (!hasDraftCardFeeCents) {
 
 if (!hasDraftFulfillmentMethod) {
   db.exec("ALTER TABLE card_checkout_drafts ADD COLUMN fulfillment_method TEXT NOT NULL DEFAULT 'pickup'");
+}
+
+if (!hasDraftAddress) {
+  db.exec("ALTER TABLE card_checkout_drafts ADD COLUMN address TEXT NOT NULL DEFAULT ''");
 }
 
 let guestUserId = null;
