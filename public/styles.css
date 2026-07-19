@@ -285,6 +285,8 @@ textarea:focus {
 .checkout-row {
   position: sticky;
   bottom: 0.6rem;
+  display: grid;
+  gap: 0.55rem;
   background: linear-gradient(135deg, rgba(255, 253, 247, 0.98), rgba(254, 245, 227, 0.98));
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -294,13 +296,17 @@ textarea:focus {
 
 #orderTotal {
   margin: 0;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.92rem;
 }
 
 .order-breakdown {
   white-space: pre-line;
   line-height: 1.35;
+}
+
+.checkout-row .btn.primary {
+  width: 100%;
 }
 
 .trust-line {

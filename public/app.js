@@ -81,7 +81,7 @@ function computeTotal(items) {
 }
 
 function getSelectedPaymentMethod() {
-  return document.querySelector("input[name='paymentMethod']:checked")?.value || "card";
+  return document.querySelector("input[name='paymentMethod']:checked")?.value || "cash";
 }
 
 function getSelectedFulfillmentMethod() {
@@ -123,9 +123,12 @@ function updateTotal() {
   const items = getCartItems();
   const breakdown = computeCheckoutBreakdown(items);
   const lines = [
-    `Subtotal: ${money(breakdown.subtotalCents)}`,
-    `Delivery: ${money(breakdown.deliveryFeeCents)}`
+    `Subtotal: ${money(breakdown.subtotalCents)}`
   ];
+
+  if (breakdown.deliveryFeeCents > 0) {
+    lines.push(`Delivery: ${money(breakdown.deliveryFeeCents)}`);
+  }
 
   if (breakdown.paymentMethod === "card") {
     lines.push(`Card processing fee: ${money(breakdown.cardFeeCents)}`);
