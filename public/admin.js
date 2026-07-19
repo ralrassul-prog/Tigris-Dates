@@ -426,7 +426,10 @@ async function resetAllOrders() {
   }
 
   showMessage("Resetting all orders...");
-  await adminApi("/api/admin/reset", { method: "POST" });
+  await adminApi("/api/admin/reset", {
+    method: "POST",
+    body: JSON.stringify({ confirmation: "RESET" })
+  });
   readyFlags = {};
   localStorage.removeItem(READY_FLAG_KEY);
   allOrders = [];

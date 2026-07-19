@@ -963,6 +963,13 @@ app.get("/api/admin/summary", requireAdmin, (_req, res) => {
 });
 
 app.post("/api/admin/reset", requireAdmin, (_req, res) => {
+  const confirmation = String(_req.body?.confirmation || "").trim();
+  if (confirmation !== "RESET") {
+    return res.status(400).json({
+      error: "Reset confirmation is required."
+    });
+  }
+
   const reset = db.transaction(() => {
     db.prepare("DELETE FROM order_items").run();
     db.prepare("DELETE FROM card_checkout_drafts").run();
