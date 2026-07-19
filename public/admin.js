@@ -250,10 +250,6 @@ function buildOrderCard(order) {
     const card = document.createElement("article");
     card.className = "product-item";
 
-    const itemsText = order.items
-      .map((item) => `${item.quantity} x ${item.productName} (${item.lineTotal})`)
-      .join("; ");
-
     const top = document.createElement("div");
     top.className = "summary-row";
 
@@ -309,15 +305,25 @@ function buildOrderCard(order) {
       ? `Delivery address: ${order.address || "Not provided"}`
       : "Pickup order";
 
-    const items = document.createElement("p");
-    items.className = "hint";
-    items.textContent = `Items: ${itemsText}`;
+    const itemsHeading = document.createElement("p");
+    itemsHeading.className = "section-caption";
+    itemsHeading.textContent = "Items";
+
+    const itemsList = document.createElement("ul");
+    itemsList.className = "admin-item-list";
+
+    for (const item of order.items) {
+      const line = document.createElement("li");
+      line.textContent = `${item.quantity} x ${item.productName} (${item.lineTotal})`;
+      itemsList.appendChild(line);
+    }
 
     card.appendChild(top);
     card.appendChild(details);
     card.appendChild(fulfillment);
     card.appendChild(addressLine);
-    card.appendChild(items);
+    card.appendChild(itemsHeading);
+    card.appendChild(itemsList);
 
     if (order.notes) {
       const notes = document.createElement("p");

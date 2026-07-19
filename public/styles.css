@@ -428,6 +428,20 @@ textarea:focus {
   letter-spacing: 0.02em;
 }
 
+.admin-item-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.15rem 0 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.admin-item-list li {
+  padding-left: 0.2rem;
+  color: var(--ink-soft);
+  line-height: 1.35;
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;
