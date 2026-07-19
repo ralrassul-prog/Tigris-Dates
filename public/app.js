@@ -9,6 +9,10 @@ const orderTotal = document.getElementById("orderTotal");
 const zelleHint = document.getElementById("zelleHint");
 const whatsappLink = document.getElementById("whatsappLink");
 const submitButton = orderForm.querySelector("button[type='submit']");
+const DELIVERY_FEE_CENTS = 500;
+const CARD_FEE_PERCENT = 0.029;
+const CARD_FEE_FIXED_CENTS = 30;
+const CARD_FEE_MODE = "gross_up";
 
 function money(cents) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -76,9 +80,61 @@ function computeTotal(items) {
   return total;
 }
 
+function getSelectedPaymentMethod() {
+  return document.querySelector("input[name='paymentMethod']:checked")?.value || "card";
+}
+
+function getSelectedFulfillmentMethod() {
+  return document.querySelector("input[name='fulfillmentMethod']:checked")?.value || "pickup";
+}
+
+function calculateCardFeeCents(baseCents) {
+  if (baseCents <= 0) {
+    return 0;
+  }
+
+  if (CARD_FEE_MODE === "simple") {
+    return Math.max(0, Math.round((baseCents * CARD_FEE_PERCENT) + CARD_FEE_FIXED_CENTS));
+  }
+
+  const grossedUpTotalCents = Math.round((baseCents + CARD_FEE_FIXED_CENTS) / (1 - CARD_FEE_PERCENT));
+  return Math.max(0, grossedUpTotalCents - baseCents);
+}
+
+function computeCheckoutBreakdown(items) {
+  const subtotalCents = computeTotal(items);
+  const fulfillmentMethod = getSelectedFulfillmentMethod();
+  const paymentMethod = getSelectedPaymentMethod();
+  const deliveryFeeCents = fulfillmentMethod === "delivery" ? DELIVERY_FEE_CENTS : 0;
+  const preCardTotalCents = subtotalCents + deliveryFeeCents;
+  const cardFeeCents = paymentMethod === "card" ? calculateCardFeeCents(preCardTotalCents) : 0;
+  const totalCents = preCardTotalCents + cardFeeCents;
+
+  return {
+    subtotalCents,
+    deliveryFeeCents,
+    cardFeeCents,
+    totalCents,
+    paymentMethod
+  };
+}
+
 function updateTotal() {
   const items = getCartItems();
-  orderTotal.textContent = `Total: ${money(computeTotal(items))}`;
+  const breakdown = computeCheckoutBreakdown(items);
+  const lines = [
+    `Subtotal: ${money(breakdown.subtotalCents)}`,
+    `Delivery: ${money(breakdown.deliveryFeeCents)}`
+  ];
+
+  if (breakdown.paymentMethod === "card") {
+    lines.push(`Card processing fee: ${money(breakdown.cardFeeCents)}`);
+    lines.push(`Total due now: ${money(breakdown.totalCents)}`);
+  } else {
+    lines.push(`Total due: ${money(breakdown.totalCents)}`);
+  }
+
+  orderTotal.textContent = lines.join("\n");
 }
 
 function renderProducts() {
@@ -117,7 +173,8 @@ async function submitOrder(event) {
   whatsappLink.classList.add("hidden");
   zelleHint.classList.add("hidden");
 
-  const selectedPayment = document.querySelector("input[name='paymentMethod']:checked")?.value || "card";
+  const selectedPayment = getSelectedPaymentMethod();
+  const selectedFulfillmentMethod = getSelectedFulfillmentMethod();
   const items = getCartItems();
 
   submitButton.disabled = true;
@@ -130,6 +187,7 @@ async function submitOrder(event) {
         customerName: document.getElementById("customerNameInput").value.trim(),
         items,
         paymentMethod: selectedPayment,
+        fulfillmentMethod: selectedFulfillmentMethod,
         phone: document.getElementById("phoneInput").value.trim(),
         notes: document.getElementById("notesInput").value.trim()
       })
@@ -212,7 +270,7 @@ productGrid.addEventListener("input", (event) => {
 
 document.querySelectorAll("input[name='paymentMethod']").forEach((radio) => {
   radio.addEventListener("change", () => {
-    const selected = document.querySelector("input[name='paymentMethod']:checked")?.value;
+    const selected = getSelectedPaymentMethod();
     if (selected === "zelle") {
       zelleHint.textContent = "Send payment by Zelle after you place your order.";
       zelleHint.classList.remove("hidden");
@@ -222,6 +280,14 @@ document.querySelectorAll("input[name='paymentMethod']").forEach((radio) => {
     } else {
       zelleHint.classList.add("hidden");
     }
+
+    updateTotal();
+  });
+});
+
+document.querySelectorAll("input[name='fulfillmentMethod']").forEach((radio) => {
+  radio.addEventListener("change", () => {
+    updateTotal();
   });
 });
 

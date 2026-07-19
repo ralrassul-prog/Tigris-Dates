@@ -15,6 +15,17 @@ const app = express();
 const port = Number(process.env.PORT || 4000);
 const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
 const currency = process.env.STRIPE_CURRENCY || "usd";
+const DELIVERY_FEE_CENTS = Math.max(0, Math.round(Number(process.env.DELIVERY_FEE_CENTS || 500)));
+const CARD_FEE_FIXED_CENTS = Math.max(0, Math.round(Number(process.env.STRIPE_CARD_FEE_FIXED_CENTS || 30)));
+const CARD_FEE_MODE = String(process.env.STRIPE_CARD_FEE_MODE || "gross_up").trim().toLowerCase();
+const CARD_FEE_PERCENT = (() => {
+  const raw = Number(process.env.STRIPE_CARD_FEE_PERCENT || 2.9);
+  if (!Number.isFinite(raw) || raw < 0) {
+    return 0.029;
+  }
+
+  return raw > 1 ? raw / 100 : raw;
+})();
 const ADMIN_SESSION_COOKIE = "tigris_admin_session";
 const ADMIN_SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
@@ -200,7 +211,8 @@ function formatUsd(cents) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function buildOrderSummaryText(items, totalCents, customerName) {
+function buildOrderSummaryText(items, totalCents, customerName, options = {}) {
+  const deliveryFeeCents = Number(options.deliveryFeeCents || 0);
   const lines = [
     "New Tigris Dates order",
     `Customer: ${customerName}`,
@@ -209,6 +221,10 @@ function buildOrderSummaryText(items, totalCents, customerName) {
 
   for (const item of items) {
     lines.push(`- ${item.quantity} x ${item.product.name} (${formatUsd(item.lineTotalCents)})`);
+  }
+
+  if (deliveryFeeCents > 0) {
+    lines.push(`Delivery: ${formatUsd(deliveryFeeCents)}`);
   }
 
   lines.push(`Total: ${formatUsd(totalCents)}`);
@@ -264,28 +280,72 @@ function validateCart(items) {
   };
 }
 
-function saveCardCheckoutDraft(sessionId, customerName, phone, notes, cart) {
+function calculateCardFeeCents(baseCents) {
+  if (!Number.isFinite(baseCents) || baseCents <= 0 || CARD_FEE_PERCENT <= 0) {
+    return 0;
+  }
+
+  if (CARD_FEE_MODE === "simple") {
+    return Math.max(0, Math.round((baseCents * CARD_FEE_PERCENT) + CARD_FEE_FIXED_CENTS));
+  }
+
+  if (CARD_FEE_PERCENT >= 1) {
+    return Math.max(0, Math.round((baseCents * CARD_FEE_PERCENT) + CARD_FEE_FIXED_CENTS));
+  }
+
+  const grossedUpTotalCents = Math.round((baseCents + CARD_FEE_FIXED_CENTS) / (1 - CARD_FEE_PERCENT));
+  return Math.max(0, grossedUpTotalCents - baseCents);
+}
+
+function buildPricingBreakdown(subtotalCents, fulfillmentMethod, paymentMethod) {
+  const safeSubtotal = Number.isFinite(subtotalCents) ? Math.max(0, Math.round(subtotalCents)) : 0;
+  const deliveryFeeCents = fulfillmentMethod === "delivery" ? DELIVERY_FEE_CENTS : 0;
+  const preCardTotalCents = safeSubtotal + deliveryFeeCents;
+  const cardFeeCents = paymentMethod === "card" ? calculateCardFeeCents(preCardTotalCents) : 0;
+  const totalCents = preCardTotalCents + cardFeeCents;
+
+  return {
+    subtotalCents: safeSubtotal,
+    deliveryFeeCents,
+    cardFeeCents,
+    totalCents
+  };
+}
+
+function saveCardCheckoutDraft(sessionId, customerName, phone, notes, cart, pricing, fulfillmentMethod) {
   db.prepare(`
     INSERT INTO card_checkout_drafts (
       stripe_session_id,
       customer_name,
       phone,
       notes,
+      subtotal_cents,
+      delivery_fee_cents,
+      card_fee_cents,
       total_cents,
+      fulfillment_method,
       items_json
-    ) VALUES (?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(stripe_session_id) DO UPDATE SET
       customer_name = excluded.customer_name,
       phone = excluded.phone,
       notes = excluded.notes,
+      subtotal_cents = excluded.subtotal_cents,
+      delivery_fee_cents = excluded.delivery_fee_cents,
+      card_fee_cents = excluded.card_fee_cents,
       total_cents = excluded.total_cents,
+      fulfillment_method = excluded.fulfillment_method,
       items_json = excluded.items_json
   `).run(
     sessionId,
     customerName,
     phone,
     notes,
-    cart.totalCents,
+    pricing.subtotalCents,
+    pricing.deliveryFeeCents,
+    pricing.cardFeeCents,
+    pricing.totalCents,
+    fulfillmentMethod,
     JSON.stringify(cart.items.map((item) => ({
       productId: item.product.id,
       quantity: item.quantity
@@ -295,7 +355,7 @@ function saveCardCheckoutDraft(sessionId, customerName, phone, notes, cart) {
 
 function loadCardCheckoutDraft(sessionId) {
   return db.prepare(`
-    SELECT stripe_session_id, customer_name, phone, notes, total_cents, items_json
+    SELECT stripe_session_id, customer_name, phone, notes, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, items_json
     FROM card_checkout_drafts
     WHERE stripe_session_id = ?
   `).get(sessionId);
@@ -312,6 +372,11 @@ function createOrderWithItems({
   paymentMethod,
   status,
   cart,
+  subtotalCents = cart.totalCents,
+  deliveryFeeCents = 0,
+  cardFeeCents = 0,
+  totalCents = subtotalCents + deliveryFeeCents + cardFeeCents,
+  fulfillmentMethod = "pickup",
   stripeSessionId = null,
   whatsappLink = null
 }) {
@@ -323,7 +388,11 @@ function createOrderWithItems({
         user_id,
         customer_name,
         admin_seen,
+        subtotal_cents,
+        delivery_fee_cents,
+        card_fee_cents,
         total_cents,
+        fulfillment_method,
         payment_method,
         status,
         address,
@@ -331,14 +400,18 @@ function createOrderWithItems({
         notes,
         stripe_session_id,
         whatsapp_link
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     orderResult = insertLegacyOrder.run(
       db.guestUserId,
       customerName,
       0,
-      cart.totalCents,
+      subtotalCents,
+      deliveryFeeCents,
+      cardFeeCents,
+      totalCents,
+      fulfillmentMethod,
       paymentMethod,
       status,
       "",
@@ -352,7 +425,11 @@ function createOrderWithItems({
       INSERT INTO orders (
         customer_name,
         admin_seen,
+        subtotal_cents,
+        delivery_fee_cents,
+        card_fee_cents,
         total_cents,
+        fulfillment_method,
         payment_method,
         status,
         address,
@@ -360,13 +437,17 @@ function createOrderWithItems({
         notes,
         stripe_session_id,
         whatsapp_link
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     orderResult = insertOrder.run(
       customerName,
       0,
-      cart.totalCents,
+      subtotalCents,
+      deliveryFeeCents,
+      cardFeeCents,
+      totalCents,
+      fulfillmentMethod,
       paymentMethod,
       status,
       "",
@@ -438,6 +519,22 @@ function persistPaidCardOrderFromDraft(sessionId) {
     return { created: false, reason: "invalid_draft_items" };
   }
 
+  const subtotalCents = Number.isFinite(Number(draft.subtotal_cents))
+    ? Number(draft.subtotal_cents)
+    : cart.totalCents;
+  const deliveryFeeCents = Number.isFinite(Number(draft.delivery_fee_cents))
+    ? Math.max(0, Number(draft.delivery_fee_cents))
+    : 0;
+  const cardFeeCents = Number.isFinite(Number(draft.card_fee_cents))
+    ? Math.max(0, Number(draft.card_fee_cents))
+    : 0;
+  const totalCents = Number.isFinite(Number(draft.total_cents))
+    ? Math.max(0, Number(draft.total_cents))
+    : subtotalCents + deliveryFeeCents + cardFeeCents;
+  const fulfillmentMethod = String(draft.fulfillment_method || "pickup").toLowerCase() === "delivery"
+    ? "delivery"
+    : "pickup";
+
   let createdOrderId = 0;
   const persistPaidCardOrder = db.transaction(() => {
     createdOrderId = createOrderWithItems({
@@ -447,6 +544,11 @@ function persistPaidCardOrderFromDraft(sessionId) {
       paymentMethod: "card",
       status: "paid",
       cart,
+      subtotalCents,
+      deliveryFeeCents,
+      cardFeeCents,
+      totalCents,
+      fulfillmentMethod,
       stripeSessionId: normalizedSessionId
     });
 
@@ -482,7 +584,11 @@ function mapOrderRow(row) {
     id: row.id,
     customerName: row.customer_name,
     adminSeen: row.admin_seen === 1,
+    subtotal: formatUsd(row.subtotal_cents || row.total_cents),
+    deliveryFee: formatUsd(row.delivery_fee_cents || 0),
+    cardFee: formatUsd(row.card_fee_cents || 0),
     total: formatUsd(row.total_cents),
+    fulfillmentMethod: row.fulfillment_method || "pickup",
     paymentMethod: row.payment_method,
     status: row.status,
     phone: row.phone,
@@ -612,7 +718,7 @@ app.get("/api/products", (_req, res) => {
 
 app.get("/api/orders", (_req, res) => {
   const rows = db.prepare(`
-    SELECT id, customer_name, admin_seen, total_cents, payment_method, status, phone, notes, created_at
+    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, phone, notes, created_at
     FROM orders
     ORDER BY id DESC
     LIMIT 20
@@ -652,7 +758,7 @@ app.get("/api/admin/orders", requireAdmin, (req, res) => {
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const rows = db.prepare(`
-    SELECT id, customer_name, admin_seen, total_cents, payment_method, status, phone, notes, created_at
+    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, phone, notes, created_at
     FROM orders
     ${whereSql}
     ORDER BY id DESC
@@ -672,7 +778,7 @@ app.get("/api/admin/orders/:orderId", requireAdmin, (req, res) => {
   }
 
   const row = db.prepare(`
-    SELECT id, customer_name, admin_seen, total_cents, payment_method, status, phone, notes, created_at
+    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, phone, notes, created_at
     FROM orders
     WHERE id = ?
   `).get(orderId);
@@ -704,7 +810,7 @@ app.patch("/api/admin/orders/:orderId/status", requireAdmin, (req, res) => {
   }
 
   const row = db.prepare(`
-    SELECT id, customer_name, admin_seen, total_cents, payment_method, status, phone, notes, created_at
+    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, phone, notes, created_at
     FROM orders
     WHERE id = ?
   `).get(orderId);
@@ -727,7 +833,7 @@ app.patch("/api/admin/orders/:orderId/open", requireAdmin, (req, res) => {
   }
 
   const row = db.prepare(`
-    SELECT id, customer_name, admin_seen, total_cents, payment_method, status, phone, notes, created_at
+    SELECT id, customer_name, admin_seen, subtotal_cents, delivery_fee_cents, card_fee_cents, total_cents, fulfillment_method, payment_method, status, phone, notes, created_at
     FROM orders
     WHERE id = ?
   `).get(orderId);
@@ -805,7 +911,7 @@ app.get("/api/admin/summary", requireAdmin, (_req, res) => {
 });
 
 app.post("/api/orders", async (req, res) => {
-  const { customerName, items, paymentMethod, phone, notes } = req.body;
+  const { customerName, items, paymentMethod, fulfillmentMethod, phone, notes } = req.body;
 
   const cleanCustomerName = String(customerName || "").trim();
   const cleanPhone = String(phone || "").trim();
@@ -821,6 +927,11 @@ app.post("/api/orders", async (req, res) => {
     return res.status(400).json({ error: "Payment method must be card, zelle, or cash." });
   }
 
+  const cleanFulfillmentMethod = String(fulfillmentMethod || "pickup").trim().toLowerCase();
+  if (!["pickup", "delivery"].includes(cleanFulfillmentMethod)) {
+    return res.status(400).json({ error: "Fulfillment method must be pickup or delivery." });
+  }
+
   const cart = validateCart(items);
   if (cart.error) {
     return res.status(400).json({ error: cart.error });
@@ -832,9 +943,12 @@ app.post("/api/orders", async (req, res) => {
     });
   }
 
+  const pricing = buildPricingBreakdown(cart.totalCents, cleanFulfillmentMethod, paymentMethod);
+
   const initialStatus = paymentMethod === "zelle"
       ? "awaiting_zelle"
       : "awaiting_cash";
+
   if (paymentMethod === "zelle") {
     const orderId = createOrderWithItems({
       customerName: cleanCustomerName,
@@ -842,10 +956,16 @@ app.post("/api/orders", async (req, res) => {
       notes: cleanNotes,
       paymentMethod,
       status: initialStatus,
-      cart
+      cart,
+      subtotalCents: pricing.subtotalCents,
+      deliveryFeeCents: pricing.deliveryFeeCents,
+      totalCents: pricing.totalCents,
+      fulfillmentMethod: cleanFulfillmentMethod
     });
 
-    const message = buildOrderSummaryText(cart.items, cart.totalCents, cleanCustomerName);
+    const message = buildOrderSummaryText(cart.items, pricing.totalCents, cleanCustomerName, {
+      deliveryFeeCents: pricing.deliveryFeeCents
+    });
     const whatsappLink = buildWhatsappLink(message);
 
     db.prepare("UPDATE orders SET whatsapp_link = ? WHERE id = ?").run(whatsappLink, orderId);
@@ -853,8 +973,11 @@ app.post("/api/orders", async (req, res) => {
     return res.status(201).json({
       orderId,
       paymentMethod,
+      fulfillmentMethod: cleanFulfillmentMethod,
       status: "awaiting_zelle",
-      total: formatUsd(cart.totalCents),
+      subtotal: formatUsd(pricing.subtotalCents),
+      deliveryFee: formatUsd(pricing.deliveryFeeCents),
+      total: formatUsd(pricing.totalCents),
       zellePayee: process.env.ZELLE_PAYEE || "Set ZELLE_PAYEE in your .env",
       whatsappLink
     });
@@ -867,14 +990,60 @@ app.post("/api/orders", async (req, res) => {
       notes: cleanNotes,
       paymentMethod,
       status: initialStatus,
-      cart
+      cart,
+      subtotalCents: pricing.subtotalCents,
+      deliveryFeeCents: pricing.deliveryFeeCents,
+      totalCents: pricing.totalCents,
+      fulfillmentMethod: cleanFulfillmentMethod
     });
 
     return res.status(201).json({
       orderId,
       paymentMethod,
+      fulfillmentMethod: cleanFulfillmentMethod,
       status: "awaiting_cash",
-      total: formatUsd(cart.totalCents)
+      subtotal: formatUsd(pricing.subtotalCents),
+      deliveryFee: formatUsd(pricing.deliveryFeeCents),
+      total: formatUsd(pricing.totalCents)
+    });
+  }
+
+  const cardCheckoutLineItems = [
+    ...cart.items.map((item) => ({
+      quantity: item.quantity,
+      price_data: {
+        currency,
+        product_data: {
+          name: item.product.name
+        },
+        unit_amount: item.product.priceCents
+      }
+    }))
+  ];
+
+  if (pricing.deliveryFeeCents > 0) {
+    cardCheckoutLineItems.push({
+      quantity: 1,
+      price_data: {
+        currency,
+        product_data: {
+          name: "Delivery fee"
+        },
+        unit_amount: pricing.deliveryFeeCents
+      }
+    });
+  }
+
+  if (pricing.cardFeeCents > 0) {
+    cardCheckoutLineItems.push({
+      quantity: 1,
+      price_data: {
+        currency,
+        product_data: {
+          name: "Card processing fee"
+        },
+        unit_amount: pricing.cardFeeCents
+      }
     });
   }
 
@@ -885,16 +1054,7 @@ app.post("/api/orders", async (req, res) => {
       success_url: `${baseUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/?checkout=cancelled`,
       payment_method_types: ["card"],
-      line_items: cart.items.map((item) => ({
-        quantity: item.quantity,
-        price_data: {
-          currency,
-          product_data: {
-            name: item.product.name
-          },
-          unit_amount: item.product.priceCents
-        }
-      }))
+      line_items: cardCheckoutLineItems
     });
   } catch (error) {
     console.error("Stripe checkout session creation failed:", error.message);
@@ -903,12 +1063,24 @@ app.post("/api/orders", async (req, res) => {
     });
   }
 
-  saveCardCheckoutDraft(session.id, cleanCustomerName, cleanPhone, cleanNotes, cart);
+  saveCardCheckoutDraft(
+    session.id,
+    cleanCustomerName,
+    cleanPhone,
+    cleanNotes,
+    cart,
+    pricing,
+    cleanFulfillmentMethod
+  );
 
   return res.status(201).json({
     paymentMethod,
+    fulfillmentMethod: cleanFulfillmentMethod,
     status: "pending_checkout",
-    total: formatUsd(cart.totalCents),
+    subtotal: formatUsd(pricing.subtotalCents),
+    deliveryFee: formatUsd(pricing.deliveryFeeCents),
+    cardFee: formatUsd(pricing.cardFeeCents),
+    total: formatUsd(pricing.totalCents),
     checkoutUrl: session.url
   });
 });
