@@ -166,13 +166,23 @@ function openSummaryDialog(text) {
   window.alert(text);
 }
 
-function buildSummaryText({ itemsText, paymentLabel, fulfillmentMethod, address, totalText }) {
+function buildSummaryText({ items, paymentLabel, fulfillmentMethod, address, totalText }) {
   const lines = [
     "Order placed successfully.",
-    `Items: ${itemsText || "None"}`,
-    `Payment: ${paymentLabel}`,
-    `Fulfillment: ${fulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}`
+    "Items:"
   ];
+
+  if (items.length > 0) {
+    items.forEach((item, index) => {
+      lines.push(`${index + 1}. ${item}`);
+    });
+  } else {
+    lines.push("None");
+  }
+
+  lines.push("");
+  lines.push(`Payment: ${paymentLabel}`);
+  lines.push(`Fulfillment: ${fulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}`);
 
   if (fulfillmentMethod === "delivery" && address) {
     lines.push(`Address: ${address}`);
@@ -274,14 +284,14 @@ async function submitOrder(event) {
       whatsappLink.classList.remove("hidden");
     }
 
-    const itemsText = items.map((item) => `${item.quantity} x ${getItemName(item.productId)}`).join("; ");
+    const summaryItems = items.map((item) => `${item.quantity} x ${getItemName(item.productId)}`);
     const paymentLabel = selectedPayment === "card"
       ? "Card"
       : selectedPayment === "zelle"
         ? "Zelle"
         : "Cash";
     openSummaryDialog(buildSummaryText({
-      itemsText,
+      items: summaryItems,
       paymentLabel,
       fulfillmentMethod: selectedFulfillmentMethod,
       address,
@@ -409,12 +419,11 @@ async function handleCheckoutStatus() {
         }
 
         if (data.order) {
-          const itemsText = (data.order.items || [])
-            .map((item) => `${item.quantity} x ${item.productName}`)
-            .join("; ");
+          const summaryItems = (data.order.items || [])
+            .map((item) => `${item.quantity} x ${item.productName}`);
 
           openSummaryDialog(buildSummaryText({
-            itemsText,
+            items: summaryItems,
             paymentLabel: "Card",
             fulfillmentMethod: data.order.fulfillmentMethod,
             address: data.order.address,
