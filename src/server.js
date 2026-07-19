@@ -624,7 +624,6 @@ function mapOrderRow(row) {
     total: formatUsd(row.total_cents),
     fulfillmentMethod: row.fulfillment_method || "pickup",
     paymentMethod: row.payment_method,
-    fulfillmentMethod: row.fulfillment_method || "pickup",
     status: row.status,
     phone: row.phone,
     address: row.address,
@@ -948,8 +947,32 @@ app.get("/api/admin/summary", requireAdmin, (_req, res) => {
       awaitingByZelle: formatUsd(awaitingByZelleCents),
       awaitingByCard: formatUsd(awaitingByCardCents),
       awaitingByCash: formatUsd(awaitingByCashCents)
+    },
+    profit: {
+      weekly: formatUsd(db.prepare(
+        "SELECT COALESCE(SUM(total_cents - card_fee_cents), 0) AS sum_cents FROM orders WHERE status IN ('paid', 'ready_for_pickup', 'completed') AND date(created_at) >= date('now', '-7 days')"
+      ).get().sum_cents),
+      monthly: formatUsd(db.prepare(
+        "SELECT COALESCE(SUM(total_cents - card_fee_cents), 0) AS sum_cents FROM orders WHERE status IN ('paid', 'ready_for_pickup', 'completed') AND date(created_at) >= date('now', 'start of month')"
+      ).get().sum_cents),
+      season: formatUsd(db.prepare(
+        "SELECT COALESCE(SUM(total_cents - card_fee_cents), 0) AS sum_cents FROM orders WHERE status IN ('paid', 'ready_for_pickup', 'completed')"
+      ).get().sum_cents)
     }
   });
+});
+
+app.post("/api/admin/reset", requireAdmin, (_req, res) => {
+  const reset = db.transaction(() => {
+    db.prepare("DELETE FROM order_items").run();
+    db.prepare("DELETE FROM card_checkout_drafts").run();
+    db.prepare("DELETE FROM orders").run();
+    db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('orders', 'order_items', 'card_checkout_drafts')").run();
+  });
+
+  reset();
+
+  return res.json({ message: "All orders and admin counts have been reset." });
 });
 
 app.post("/api/orders", async (req, res) => {

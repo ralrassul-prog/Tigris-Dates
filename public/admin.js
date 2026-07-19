@@ -17,6 +17,10 @@ const awaitingByZelle = document.getElementById("awaitingByZelle");
 const awaitingByCard = document.getElementById("awaitingByCard");
 const awaitingByCash = document.getElementById("awaitingByCash");
 const newOrdersCount = document.getElementById("newOrdersCount");
+const weeklyProfit = document.getElementById("weeklyProfit");
+const monthlyProfit = document.getElementById("monthlyProfit");
+const seasonProfit = document.getElementById("seasonProfit");
+const resetButton = document.getElementById("resetButton");
 
 let currentTab = "active";
 let allOrders = [];
@@ -77,6 +81,9 @@ function renderSummary(summary) {
   awaitingByCard.textContent = summary.awaitingByCard;
   awaitingByCash.textContent = summary.awaitingByCash;
   newOrdersCount.textContent = String(summary.newOrders || 0);
+  weeklyProfit.textContent = summary.profit?.weekly || "$0.00";
+  monthlyProfit.textContent = summary.profit?.monthly || "$0.00";
+  seasonProfit.textContent = summary.profit?.season || "$0.00";
 
   summaryText.textContent = [
     `Total orders: ${summary.totalOrders}`,
@@ -292,12 +299,24 @@ function buildOrderCard(order) {
     details.className = "hint";
     details.textContent = `Name: ${order.customerName} | Phone: ${order.phone} | Created: ${order.createdAt}`;
 
+    const fulfillment = document.createElement("p");
+    fulfillment.className = "hint";
+    fulfillment.textContent = `Order type: ${order.fulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}`;
+
+    const addressLine = document.createElement("p");
+    addressLine.className = "hint";
+    addressLine.textContent = order.fulfillmentMethod === "delivery"
+      ? `Delivery address: ${order.address || "Not provided"}`
+      : "Pickup order";
+
     const items = document.createElement("p");
     items.className = "hint";
     items.textContent = `Items: ${itemsText}`;
 
     card.appendChild(top);
     card.appendChild(details);
+    card.appendChild(fulfillment);
+    card.appendChild(addressLine);
     card.appendChild(items);
 
     if (order.notes) {
@@ -385,6 +404,52 @@ async function loadAdminData() {
   renderOrders();
 }
 
+async function resetAllOrders() {
+  const confirmed = window.confirm(
+    "This will delete all orders, reset order numbers, and clear admin counts. Type RESET in the next prompt to continue."
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  const typed = window.prompt("Type RESET to confirm full data reset.");
+  if (typed !== "RESET") {
+    showMessage("Reset cancelled.");
+    return;
+  }
+
+  showMessage("Resetting all orders...");
+  await adminApi("/api/admin/reset", { method: "POST" });
+  readyFlags = {};
+  localStorage.removeItem(READY_FLAG_KEY);
+  allOrders = [];
+  ordersWrap.innerHTML = "";
+  renderSummary({
+    totalOrders: 0,
+    awaitingPayment: 0,
+    paid: 0,
+    readyForPickup: 0,
+    completed: 0,
+    cancelled: 0,
+    newOrders: 0,
+    revenuePaid: "$0.00",
+    revenueUnpaid: "$0.00",
+    paidByZelle: "$0.00",
+    paidByCard: "$0.00",
+    paidByCash: "$0.00",
+    awaitingByZelle: "$0.00",
+    awaitingByCard: "$0.00",
+    awaitingByCash: "$0.00",
+    profit: {
+      weekly: "$0.00",
+      monthly: "$0.00",
+      season: "$0.00"
+    }
+  });
+  showMessage("All orders reset.");
+}
+
 async function checkSessionAndLoad() {
   try {
     const sessionData = await adminApi("/api/admin/session", { method: "GET" });
@@ -452,6 +517,13 @@ logoutButton.addEventListener("click", async () => {
 
 activeTabButton.addEventListener("click", () => setTab("active"));
 completedTabButton.addEventListener("click", () => setTab("completed"));
+resetButton.addEventListener("click", async () => {
+  try {
+    await resetAllOrders();
+  } catch (error) {
+    showMessage(error.message, true);
+  }
+});
 
 setTab("active");
 setAuthenticatedState(false);

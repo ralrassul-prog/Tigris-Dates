@@ -367,6 +367,17 @@ textarea:focus {
   grid-column: 1 / -1;
 }
 
+.admin-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn.danger {
+  border-color: #d46c6c;
+  color: #8f2020;
+  background: #fff4f4;
+}
+
 .metric-label {
   margin: 0;
   color: var(--ink-soft);
