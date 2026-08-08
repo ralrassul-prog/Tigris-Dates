@@ -25,14 +25,6 @@ const resetButton = document.getElementById("resetButton");
 let currentTab = "active";
 let allOrders = [];
 let isAuthenticated = false;
-const READY_FLAG_KEY = "tigris_ready_flags";
-let readyFlags = {};
-
-try {
-  readyFlags = JSON.parse(localStorage.getItem(READY_FLAG_KEY) || "{}") || {};
-} catch (_error) {
-  readyFlags = {};
-}
 
 function showMessage(text, isError = false) {
   adminMessage.style.color = isError ? "#a61b1b" : "#0f766e";
@@ -71,7 +63,7 @@ async function adminApi(path, options = {}) {
   return data;
 }
 
-function renderSummary(summary) {
+function renderSummary(summary, profit = {}) {
   paidTotal.textContent = summary.revenuePaid;
   unpaidTotal.textContent = summary.revenueUnpaid;
   paidByZelle.textContent = summary.paidByZelle;
@@ -81,9 +73,9 @@ function renderSummary(summary) {
   awaitingByCard.textContent = summary.awaitingByCard;
   awaitingByCash.textContent = summary.awaitingByCash;
   newOrdersCount.textContent = String(summary.newOrders || 0);
-  weeklyProfit.textContent = summary.profit?.weekly || "$0.00";
-  monthlyProfit.textContent = summary.profit?.monthly || "$0.00";
-  seasonProfit.textContent = summary.profit?.season || "$0.00";
+  weeklyProfit.textContent = profit.weekly || "$0.00";
+  monthlyProfit.textContent = profit.monthly || "$0.00";
+  seasonProfit.textContent = profit.season || "$0.00";
 
   summaryText.textContent = [
     `Total orders: ${summary.totalOrders}`,
@@ -120,25 +112,14 @@ function isReadyStatus(status) {
 }
 
 function isOrderMarkedReady(orderId) {
-  return readyFlags[String(orderId)] === true;
-}
-
-function setOrderMarkedReady(orderId, markedReady) {
-  const key = String(orderId);
-
-  if (markedReady) {
-    readyFlags[key] = true;
-  } else {
-    delete readyFlags[key];
-  }
-
-  localStorage.setItem(READY_FLAG_KEY, JSON.stringify(readyFlags));
+  const order = allOrders.find((item) => item.id === orderId);
+  return order?.status === "ready_for_pickup";
 }
 
 function sortUncheckedFirst(orders) {
   return [...orders].sort((a, b) => {
-    const aReady = isOrderMarkedReady(a.id) ? 1 : 0;
-    const bReady = isOrderMarkedReady(b.id) ? 1 : 0;
+    const aReady = a.status === "ready_for_pickup" ? 1 : 0;
+    const bReady = b.status === "ready_for_pickup" ? 1 : 0;
     return aReady - bReady;
   });
 }
@@ -162,6 +143,7 @@ function createStatusSelect(order) {
     "awaiting_zelle",
     "awaiting_cash",
     "paid",
+    "ready_for_pickup",
     "completed",
     "cancelled"
   ];
@@ -169,7 +151,7 @@ function createStatusSelect(order) {
   for (const status of statuses) {
     const option = document.createElement("option");
     option.value = status;
-    option.textContent = status;
+    option.textContent = statusLabel(status);
     option.selected = status === order.status;
     select.appendChild(option);
   }
@@ -195,18 +177,26 @@ function createReadyCheckbox(order) {
 
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
-  checkbox.checked = isOrderMarkedReady(order.id);
-  checkbox.disabled = order.status === "cancelled" || order.status === "completed";
+  checkbox.checked = order.status === "ready_for_pickup";
+  checkbox.disabled = !(order.status === "paid" || order.status === "ready_for_pickup");
 
   const text = document.createElement("span");
   text.textContent = "Ready for pickup";
 
-  checkbox.addEventListener("change", () => {
-    setOrderMarkedReady(order.id, checkbox.checked);
-    showMessage(checkbox.checked
-      ? `Order #${order.id} marked ready for pickup.`
-      : `Order #${order.id} marked not ready.`);
-    renderOrders();
+  checkbox.addEventListener("change", async () => {
+    try {
+      const nextStatus = checkbox.checked ? "ready_for_pickup" : "paid";
+      await updateOrderStatus(
+        order.id,
+        nextStatus,
+        checkbox.checked
+          ? `Order #${order.id} marked ready for pickup.`
+          : `Order #${order.id} moved back to paid.`
+      );
+    } catch (error) {
+      checkbox.checked = !checkbox.checked;
+      showMessage(error.message, true);
+    }
   });
 
   wrapper.appendChild(checkbox);
@@ -406,7 +396,7 @@ async function loadAdminData() {
   const ordersData = await adminApi("/api/admin/orders?limit=200", { method: "GET" });
 
   allOrders = ordersData.orders || [];
-  renderSummary(summaryData.summary);
+  renderSummary(summaryData.summary || {}, summaryData.profit || {});
   renderOrders();
 }
 
@@ -430,8 +420,6 @@ async function resetAllOrders() {
     method: "POST",
     body: JSON.stringify({ confirmation: "RESET" })
   });
-  readyFlags = {};
-  localStorage.removeItem(READY_FLAG_KEY);
   allOrders = [];
   ordersWrap.innerHTML = "";
   renderSummary({
@@ -449,12 +437,11 @@ async function resetAllOrders() {
     paidByCash: "$0.00",
     awaitingByZelle: "$0.00",
     awaitingByCard: "$0.00",
-    awaitingByCash: "$0.00",
-    profit: {
-      weekly: "$0.00",
-      monthly: "$0.00",
-      season: "$0.00"
-    }
+    awaitingByCash: "$0.00"
+  }, {
+    weekly: "$0.00",
+    monthly: "$0.00",
+    season: "$0.00"
   });
   showMessage("All orders reset.");
 }
