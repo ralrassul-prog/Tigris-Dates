@@ -65,17 +65,6 @@ body {
   padding: 1rem;
 }
 
-.hero-admin-link {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 0.25rem;
-}
-
-.btn-admin-entry {
-  padding: 0.35rem 0.7rem;
-  font-size: 0.78rem;
-}
-
 .compact-hero {
   display: grid;
   gap: 0.18rem;
@@ -191,6 +180,42 @@ textarea:focus {
   gap: 0.55rem;
 }
 
+.product-media,
+.product-image-frame {
+  border: 1px solid #e9c993;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #fffaf0, #fff2de);
+}
+
+.product-media {
+  margin-bottom: 0.45rem;
+}
+
+.product-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.product-image-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 132px;
+  padding: 0.6rem;
+  color: #85623b;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.45),
+    rgba(255, 255, 255, 0.45) 10px,
+    rgba(255, 247, 231, 0.9) 10px,
+    rgba(255, 247, 231, 0.9) 20px
+  );
+  text-align: center;
+  font-size: 0.84rem;
+}
+
 .product-item {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -203,6 +228,31 @@ textarea:focus {
   font-size: 0.92rem;
 }
 
+.product-admin-card {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.product-admin-main {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 0.6rem;
+  align-items: start;
+}
+
+.product-admin-main .stacked-form {
+  gap: 0.28rem;
+}
+
+.product-admin-main h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.product-actions {
+  justify-content: flex-end;
+}
+
 .product-meta {
   margin: 0.12rem 0 0;
   color: var(--ink-soft);
@@ -211,6 +261,10 @@ textarea:focus {
 
 .product-item label {
   margin-top: 0.35rem;
+}
+
+.product-item .product-image-placeholder {
+  min-height: 126px;
 }
 
 .qty-shell {
@@ -285,8 +339,6 @@ textarea:focus {
 .checkout-row {
   position: sticky;
   bottom: 0.6rem;
-  display: grid;
-  gap: 0.55rem;
   background: linear-gradient(135deg, rgba(255, 253, 247, 0.98), rgba(254, 245, 227, 0.98));
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -296,17 +348,8 @@ textarea:focus {
 
 #orderTotal {
   margin: 0;
-  font-weight: 600;
-  font-size: 0.92rem;
-}
-
-.order-breakdown {
-  white-space: pre-line;
-  line-height: 1.35;
-}
-
-.checkout-row .btn.primary {
-  width: 100%;
+  font-weight: 700;
+  font-size: 0.96rem;
 }
 
 .trust-line {
@@ -332,58 +375,6 @@ textarea:focus {
   display: none;
 }
 
-.order-summary-dialog {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 0.8rem;
-  max-width: 520px;
-  width: calc(100% - 1.5rem);
-  max-height: min(84vh, 620px);
-  overflow: auto;
-}
-
-.order-summary-dialog::backdrop {
-  background: rgba(26, 16, 0, 0.32);
-}
-
-.season-notice-dialog {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 0.85rem;
-  max-width: 520px;
-  width: calc(100% - 1.5rem);
-  max-height: min(84vh, 560px);
-  overflow: auto;
-}
-
-.season-notice-dialog::backdrop {
-  background: rgba(26, 16, 0, 0.42);
-}
-
-.season-notice-dialog .hint {
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.season-notice-dialog .btn.primary {
-  width: 100%;
-}
-
-#orderSummaryText {
-  margin: 0;
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-  line-height: 1.45;
-}
-
-.order-summary-dialog .stacked-form {
-  gap: 0.7rem;
-}
-
-.order-summary-dialog .btn.primary {
-  width: 100%;
-}
-
 .account-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -405,17 +396,6 @@ textarea:focus {
 
 .metric-new-orders {
   grid-column: 1 / -1;
-}
-
-.admin-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.btn.danger {
-  border-color: #d46c6c;
-  color: #8f2020;
-  background: #fff4f4;
 }
 
 .metric-label {
@@ -449,20 +429,6 @@ textarea:focus {
   font-weight: 700;
   color: #784718;
   letter-spacing: 0.02em;
-}
-
-.admin-item-list {
-  list-style: none;
-  padding: 0;
-  margin: 0.15rem 0 0;
-  display: grid;
-  gap: 0.2rem;
-}
-
-.admin-item-list li {
-  padding-left: 0.2rem;
-  color: var(--ink-soft);
-  line-height: 1.35;
 }
 
 .chip-row {
@@ -576,24 +542,16 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .product-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .product-admin-main {
+    grid-template-columns: 1fr;
+  }
+
   .chip-row {
     row-gap: 0.28rem;
-  }
-
-  .order-summary-dialog {
-    width: calc(100% - 0.9rem);
-    padding: 0.7rem;
-    max-height: min(88vh, 560px);
-  }
-
-  .season-notice-dialog {
-    width: calc(100% - 0.9rem);
-    padding: 0.72rem;
-    max-height: min(88vh, 500px);
-  }
-
-  #orderSummaryText {
-    font-size: 0.95rem;
   }
 
 }

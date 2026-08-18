@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const Database = require("better-sqlite3");
+const { products: seedProducts } = require("./config/products");
 
 const dataDir = path.join(__dirname, "..", "data");
 if (!fs.existsSync(dataDir)) {
@@ -9,6 +10,10 @@ if (!fs.existsSync(dataDir)) {
 
 const dbPath = path.join(dataDir, "tigris-dates.db");
 const db = new Database(dbPath);
+
+const hadProductsTable = db.prepare(
+  "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'products' LIMIT 1"
+).get();
 
 db.pragma("journal_mode = WAL");
 
@@ -66,7 +71,68 @@ CREATE TABLE IF NOT EXISTS card_checkout_drafts (
   items_json TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS products (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  weight_label TEXT NOT NULL DEFAULT '',
+  type_label TEXT NOT NULL DEFAULT '',
+  price_cents INTEGER NOT NULL,
+  image_url TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `);
+
+const productColumns = db.prepare("PRAGMA table_info(products)").all();
+const hasProductWeightLabel = productColumns.some((col) => col.name === "weight_label");
+const hasProductTypeLabel = productColumns.some((col) => col.name === "type_label");
+const hasProductPriceCents = productColumns.some((col) => col.name === "price_cents");
+const hasProductImageUrl = productColumns.some((col) => col.name === "image_url");
+const hasProductUpdatedAt = productColumns.some((col) => col.name === "updated_at");
+
+if (!hasProductWeightLabel) {
+  db.exec("ALTER TABLE products ADD COLUMN weight_label TEXT NOT NULL DEFAULT ''");
+}
+
+if (!hasProductTypeLabel) {
+  db.exec("ALTER TABLE products ADD COLUMN type_label TEXT NOT NULL DEFAULT ''");
+}
+
+if (!hasProductPriceCents) {
+  db.exec("ALTER TABLE products ADD COLUMN price_cents INTEGER NOT NULL DEFAULT 0");
+}
+
+if (!hasProductImageUrl) {
+  db.exec("ALTER TABLE products ADD COLUMN image_url TEXT NOT NULL DEFAULT ''");
+}
+
+if (!hasProductUpdatedAt) {
+  db.exec("ALTER TABLE products ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+}
+
+const existingProductCount = db.prepare("SELECT COUNT(*) AS count FROM products").get().count;
+if (!hadProductsTable && existingProductCount === 0 && Array.isArray(seedProducts) && seedProducts.length > 0) {
+  const insertSeedProduct = db.prepare(`
+    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const seedTransaction = db.transaction(() => {
+    for (const product of seedProducts) {
+      insertSeedProduct.run(
+        product.id,
+        product.name,
+        product.weightLabel || "",
+        product.typeLabel || "",
+        product.priceCents,
+        product.imageUrl || ""
+      );
+    }
+  });
+
+  seedTransaction();
+}
 
 const orderColumns = db.prepare("PRAGMA table_info(orders)").all();
 const hasCustomerName = orderColumns.some((col) => col.name === "customer_name");

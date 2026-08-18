@@ -25,86 +25,105 @@
       <section class="card">
         <form id="adminForm" class="stacked-form">
           <label>
-            Admin Password
-            <input id="adminPasswordInput" type="password" placeholder="Enter your admin password" required />
+            Admin API Key
+            <input id="adminKeyInput" type="password" placeholder="Enter your ADMIN_API_KEY" required />
           </label>
           <div class="summary-row">
-            <button class="btn primary" type="submit">Sign In</button>
-            <button id="refreshButton" class="btn ghost hidden" type="button">Refresh</button>
-            <button id="logoutButton" class="btn ghost hidden" type="button">Log Out</button>
+            <button class="btn primary" type="submit">Load Orders</button>
+            <button id="refreshButton" class="btn ghost" type="button">Refresh</button>
           </div>
           <p id="adminMessage" class="message"></p>
         </form>
       </section>
 
-      <div id="adminDashboard" class="stacked-form hidden">
-        <section class="card">
-          <h3>Account</h3>
-          <div id="accountGrid" class="account-grid">
-            <article class="metric-card metric-highlight metric-new-orders">
-              <p class="metric-label">New Orders</p>
-              <p id="newOrdersCount" class="metric-value">0</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-label">Paid</p>
-              <p id="paidTotal" class="metric-value">$0.00</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-label">Not Paid</p>
-              <p id="unpaidTotal" class="metric-value">$0.00</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-label">Paid by Zelle</p>
-              <p id="paidByZelle" class="metric-value">$0.00</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-label">Paid by Card</p>
-              <p id="paidByCard" class="metric-value">$0.00</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-label">Paid by Cash</p>
-              <p id="paidByCash" class="metric-value">$0.00</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-label">Awaiting Zelle</p>
-              <p id="awaitingByZelle" class="metric-value">$0.00</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-label">Awaiting Card</p>
-              <p id="awaitingByCard" class="metric-value">$0.00</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-label">Awaiting Cash</p>
-              <p id="awaitingByCash" class="metric-value">$0.00</p>
-            </article>
-            <article class="metric-card metric-highlight metric-new-orders">
-              <p class="metric-label">Weekly Profit</p>
-              <p id="weeklyProfit" class="metric-value">$0.00</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-label">Monthly Profit</p>
-              <p id="monthlyProfit" class="metric-value">$0.00</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-label">Season Profit</p>
-              <p id="seasonProfit" class="metric-value">$0.00</p>
-            </article>
-          </div>
-          <p id="summaryText" class="hint">Not loaded yet.</p>
-          <div class="admin-actions">
-            <button id="resetButton" class="btn ghost danger" type="button">Reset All Orders</button>
-          </div>
-        </section>
+      <section class="card">
+        <h3>Account</h3>
+        <div id="accountGrid" class="account-grid">
+          <article class="metric-card metric-highlight metric-new-orders">
+            <p class="metric-label">New Orders</p>
+            <p id="newOrdersCount" class="metric-value">0</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">Paid</p>
+            <p id="paidTotal" class="metric-value">$0.00</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">Not Paid</p>
+            <p id="unpaidTotal" class="metric-value">$0.00</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">Paid by Zelle</p>
+            <p id="paidByZelle" class="metric-value">$0.00</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">Paid by Card</p>
+            <p id="paidByCard" class="metric-value">$0.00</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">Paid by Cash</p>
+            <p id="paidByCash" class="metric-value">$0.00</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">Awaiting Zelle</p>
+            <p id="awaitingByZelle" class="metric-value">$0.00</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">Awaiting Card</p>
+            <p id="awaitingByCard" class="metric-value">$0.00</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">Awaiting Cash</p>
+            <p id="awaitingByCash" class="metric-value">$0.00</p>
+          </article>
+        </div>
+        <p id="summaryText" class="hint">Not loaded yet.</p>
+      </section>
 
-        <section class="card">
-          <h3>Orders</h3>
-          <div class="tab-row" role="tablist" aria-label="Order tabs">
-            <button id="activeTabButton" class="btn ghost tab-active" type="button" role="tab" aria-selected="true">Active Orders</button>
-            <button id="completedTabButton" class="btn ghost" type="button" role="tab" aria-selected="false">Closed Orders</button>
+      <section class="card">
+        <h3>Products</h3>
+        <form id="productForm" class="stacked-form">
+          <input id="productEditingId" type="hidden" />
+          <div class="field-grid">
+            <label>
+              Product name
+              <input id="productNameInput" type="text" required />
+            </label>
+            <label>
+              Price (USD)
+              <input id="productPriceInput" type="number" step="0.01" min="0.01" required />
+            </label>
           </div>
-          <div id="ordersWrap" class="stacked-form"></div>
-        </section>
-      </div>
+          <div class="field-grid">
+            <label>
+              Weight label
+              <input id="productWeightInput" type="text" placeholder="5lb" />
+            </label>
+            <label>
+              Type label
+              <input id="productTypeInput" type="text" placeholder="Mix" />
+            </label>
+          </div>
+          <label>
+            Image URL
+            <input id="productImageInput" type="url" placeholder="https://example.com/image.jpg" />
+          </label>
+          <div class="summary-row">
+            <button class="btn primary" type="submit">Save Product</button>
+            <button id="productResetButton" class="btn ghost" type="button">Reset</button>
+          </div>
+          <p id="productMessage" class="message"></p>
+        </form>
+        <div id="productList" class="stacked-form"></div>
+      </section>
+
+      <section class="card">
+        <h3>Orders</h3>
+        <div class="tab-row" role="tablist" aria-label="Order tabs">
+          <button id="activeTabButton" class="btn ghost tab-active" type="button" role="tab" aria-selected="true">Active Orders</button>
+          <button id="completedTabButton" class="btn ghost" type="button" role="tab" aria-selected="false">Closed Orders</button>
+        </div>
+        <div id="ordersWrap" class="stacked-form"></div>
+      </section>
     </main>
 
     <script src="/admin.js" defer></script>

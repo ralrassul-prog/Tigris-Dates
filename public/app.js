@@ -226,15 +226,73 @@ function renderProducts() {
   for (const product of state.products) {
     const article = document.createElement("article");
     article.className = "product-item";
-    article.innerHTML = `
-      <h4>${product.name}</h4>
-      <p class="product-meta">${money(product.priceCents)}</p>
-      <div class="qty-shell">
-        <button type="button" class="qty-btn" data-action="decrement" data-product-id="${product.id}" aria-label="Decrease ${product.name}">-</button>
-        <input id="qty-${product.id}" class="qty-input" type="text" inputmode="numeric" value="0" aria-label="Quantity for ${product.name}" />
-        <button type="button" class="qty-btn" data-action="increment" data-product-id="${product.id}" aria-label="Increase ${product.name}">+</button>
-      </div>
-    `;
+
+    const media = document.createElement("div");
+    media.className = "product-media";
+
+    if (product.imageUrl) {
+      const img = document.createElement("img");
+      img.className = "product-image";
+      img.src = product.imageUrl;
+      img.alt = product.name;
+      img.loading = "lazy";
+      media.appendChild(img);
+    } else {
+      const placeholder = document.createElement("div");
+      placeholder.className = "product-image-placeholder";
+      placeholder.textContent = "Image coming soon";
+      media.appendChild(placeholder);
+    }
+
+    const title = document.createElement("h4");
+    title.textContent = product.name;
+
+    const meta = document.createElement("p");
+    meta.className = "product-meta";
+    const parts = [money(product.priceCents)];
+    if (product.weightLabel) {
+      parts.push(product.weightLabel);
+    }
+    if (product.typeLabel) {
+      parts.push(product.typeLabel);
+    }
+    meta.textContent = parts.join(" • ");
+
+    const qtyShell = document.createElement("div");
+    qtyShell.className = "qty-shell";
+
+    const decrementButton = document.createElement("button");
+    decrementButton.type = "button";
+    decrementButton.className = "qty-btn";
+    decrementButton.dataset.action = "decrement";
+    decrementButton.dataset.productId = product.id;
+    decrementButton.setAttribute("aria-label", `Decrease ${product.name}`);
+    decrementButton.textContent = "-";
+
+    const quantityInput = document.createElement("input");
+    quantityInput.id = `qty-${product.id}`;
+    quantityInput.className = "qty-input";
+    quantityInput.type = "text";
+    quantityInput.inputMode = "numeric";
+    quantityInput.value = "0";
+    quantityInput.setAttribute("aria-label", `Quantity for ${product.name}`);
+
+    const incrementButton = document.createElement("button");
+    incrementButton.type = "button";
+    incrementButton.className = "qty-btn";
+    incrementButton.dataset.action = "increment";
+    incrementButton.dataset.productId = product.id;
+    incrementButton.setAttribute("aria-label", `Increase ${product.name}`);
+    incrementButton.textContent = "+";
+
+    qtyShell.appendChild(decrementButton);
+    qtyShell.appendChild(quantityInput);
+    qtyShell.appendChild(incrementButton);
+
+    article.appendChild(media);
+    article.appendChild(title);
+    article.appendChild(meta);
+    article.appendChild(qtyShell);
 
     productGrid.appendChild(article);
   }

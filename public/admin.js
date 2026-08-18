@@ -1,13 +1,21 @@
 const adminForm = document.getElementById("adminForm");
-const adminPasswordInput = document.getElementById("adminPasswordInput");
+const adminKeyInput = document.getElementById("adminKeyInput");
 const adminMessage = document.getElementById("adminMessage");
-const adminDashboard = document.getElementById("adminDashboard");
 const summaryText = document.getElementById("summaryText");
 const ordersWrap = document.getElementById("ordersWrap");
 const refreshButton = document.getElementById("refreshButton");
-const logoutButton = document.getElementById("logoutButton");
 const activeTabButton = document.getElementById("activeTabButton");
 const completedTabButton = document.getElementById("completedTabButton");
+const productForm = document.getElementById("productForm");
+const productEditingId = document.getElementById("productEditingId");
+const productNameInput = document.getElementById("productNameInput");
+const productPriceInput = document.getElementById("productPriceInput");
+const productWeightInput = document.getElementById("productWeightInput");
+const productTypeInput = document.getElementById("productTypeInput");
+const productImageInput = document.getElementById("productImageInput");
+const productResetButton = document.getElementById("productResetButton");
+const productMessage = document.getElementById("productMessage");
+const productList = document.getElementById("productList");
 const paidTotal = document.getElementById("paidTotal");
 const unpaidTotal = document.getElementById("unpaidTotal");
 const paidByZelle = document.getElementById("paidByZelle");
@@ -17,45 +25,35 @@ const awaitingByZelle = document.getElementById("awaitingByZelle");
 const awaitingByCard = document.getElementById("awaitingByCard");
 const awaitingByCash = document.getElementById("awaitingByCash");
 const newOrdersCount = document.getElementById("newOrdersCount");
-const weeklyProfit = document.getElementById("weeklyProfit");
-const monthlyProfit = document.getElementById("monthlyProfit");
-const seasonProfit = document.getElementById("seasonProfit");
-const resetButton = document.getElementById("resetButton");
 
+let adminKey = localStorage.getItem("tigris_admin_key") || "";
 let currentTab = "active";
 let allOrders = [];
-let isAuthenticated = false;
+let allProducts = [];
+const READY_FLAG_KEY = "tigris_ready_flags";
+let readyFlags = {};
 
-function showMessage(text, isError = false) {
-  adminMessage.style.color = isError ? "#a61b1b" : "#0f766e";
-  adminMessage.textContent = text;
+try {
+  readyFlags = JSON.parse(localStorage.getItem(READY_FLAG_KEY) || "{}") || {};
+} catch (_error) {
+  readyFlags = {};
 }
 
-function setAuthenticatedState(nextState) {
-  isAuthenticated = nextState;
-  adminDashboard.classList.toggle("hidden", !nextState);
-  refreshButton.classList.toggle("hidden", !nextState);
-  logoutButton.classList.toggle("hidden", !nextState);
-  adminPasswordInput.disabled = nextState;
+if (adminKey) {
+  adminKeyInput.value = adminKey;
 }
 
 async function adminApi(path, options = {}) {
-  const hasBody = typeof options.body === "string";
   const response = await fetch(path, {
     ...options,
-    credentials: "same-origin",
     headers: {
-      ...(hasBody ? { "Content-Type": "application/json" } : {}),
+      "Content-Type": "application/json",
+      "x-admin-key": adminKey,
       ...(options.headers || {})
     }
   });
 
   const data = await response.json().catch(() => ({}));
-  if (response.status === 401) {
-    setAuthenticatedState(false);
-    throw new Error("Please sign in as admin.");
-  }
-
   if (!response.ok) {
     throw new Error(data.error || "Admin request failed.");
   }
@@ -63,7 +61,11 @@ async function adminApi(path, options = {}) {
   return data;
 }
 
-function renderSummary(summary, profit = {}) {
+function formatProductPrice(cents) {
+  return `$${(Number(cents || 0) / 100).toFixed(2)}`;
+}
+
+function renderSummary(summary) {
   paidTotal.textContent = summary.revenuePaid;
   unpaidTotal.textContent = summary.revenueUnpaid;
   paidByZelle.textContent = summary.paidByZelle;
@@ -73,9 +75,6 @@ function renderSummary(summary, profit = {}) {
   awaitingByCard.textContent = summary.awaitingByCard;
   awaitingByCash.textContent = summary.awaitingByCash;
   newOrdersCount.textContent = String(summary.newOrders || 0);
-  weeklyProfit.textContent = profit.weekly || "$0.00";
-  monthlyProfit.textContent = profit.monthly || "$0.00";
-  seasonProfit.textContent = profit.season || "$0.00";
 
   summaryText.textContent = [
     `Total orders: ${summary.totalOrders}`,
@@ -112,27 +111,39 @@ function isReadyStatus(status) {
 }
 
 function isOrderMarkedReady(orderId) {
-  const order = allOrders.find((item) => item.id === orderId);
-  return order?.status === "ready_for_pickup";
+  return readyFlags[String(orderId)] === true;
+}
+
+function setOrderMarkedReady(orderId, markedReady) {
+  const key = String(orderId);
+
+  if (markedReady) {
+    readyFlags[key] = true;
+  } else {
+    delete readyFlags[key];
+  }
+
+  localStorage.setItem(READY_FLAG_KEY, JSON.stringify(readyFlags));
 }
 
 function sortUncheckedFirst(orders) {
   return [...orders].sort((a, b) => {
-    const aReady = a.status === "ready_for_pickup" ? 1 : 0;
-    const bReady = b.status === "ready_for_pickup" ? 1 : 0;
+    const aReady = isOrderMarkedReady(a.id) ? 1 : 0;
+    const bReady = isOrderMarkedReady(b.id) ? 1 : 0;
     return aReady - bReady;
   });
 }
 
 async function updateOrderStatus(orderId, nextStatus, successMessage) {
-  showMessage(`Updating order #${orderId}...`);
+  adminMessage.style.color = "#0f766e";
+  adminMessage.textContent = `Updating order #${orderId}...`;
 
   await adminApi(`/api/admin/orders/${orderId}/status`, {
     method: "PATCH",
     body: JSON.stringify({ status: nextStatus })
   });
 
-  showMessage(successMessage);
+  adminMessage.textContent = successMessage;
   await loadAdminData();
 }
 
@@ -143,7 +154,6 @@ function createStatusSelect(order) {
     "awaiting_zelle",
     "awaiting_cash",
     "paid",
-    "ready_for_pickup",
     "completed",
     "cancelled"
   ];
@@ -151,7 +161,7 @@ function createStatusSelect(order) {
   for (const status of statuses) {
     const option = document.createElement("option");
     option.value = status;
-    option.textContent = statusLabel(status);
+    option.textContent = status;
     option.selected = status === order.status;
     select.appendChild(option);
   }
@@ -164,7 +174,8 @@ function createStatusSelect(order) {
         `Order #${order.id} updated to ${select.value}.`
       );
     } catch (error) {
-      showMessage(error.message, true);
+      adminMessage.style.color = "#a61b1b";
+      adminMessage.textContent = error.message;
     }
   });
 
@@ -177,26 +188,19 @@ function createReadyCheckbox(order) {
 
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
-  checkbox.checked = order.status === "ready_for_pickup";
-  checkbox.disabled = !(order.status === "paid" || order.status === "ready_for_pickup");
+  checkbox.checked = isOrderMarkedReady(order.id);
+  checkbox.disabled = order.status === "cancelled" || order.status === "completed";
 
   const text = document.createElement("span");
   text.textContent = "Ready for pickup";
 
-  checkbox.addEventListener("change", async () => {
-    try {
-      const nextStatus = checkbox.checked ? "ready_for_pickup" : "paid";
-      await updateOrderStatus(
-        order.id,
-        nextStatus,
-        checkbox.checked
-          ? `Order #${order.id} marked ready for pickup.`
-          : `Order #${order.id} moved back to paid.`
-      );
-    } catch (error) {
-      checkbox.checked = !checkbox.checked;
-      showMessage(error.message, true);
-    }
+  checkbox.addEventListener("change", () => {
+    setOrderMarkedReady(order.id, checkbox.checked);
+    adminMessage.style.color = "#0f766e";
+    adminMessage.textContent = checkbox.checked
+      ? `Order #${order.id} marked ready for pickup.`
+      : `Order #${order.id} marked not ready.`;
+    renderOrders();
   });
 
   wrapper.appendChild(checkbox);
@@ -212,20 +216,153 @@ function createOpenButton(order) {
 
   button.addEventListener("click", async () => {
     try {
-      showMessage(`Opening order #${order.id}...`);
+      adminMessage.style.color = "#0f766e";
+      adminMessage.textContent = `Opening order #${order.id}...`;
 
       await adminApi(`/api/admin/orders/${order.id}/open`, {
         method: "PATCH"
       });
 
-      showMessage(`Order #${order.id} moved to active bins.`);
+      adminMessage.textContent = `Order #${order.id} moved to active bins.`;
       await loadAdminData();
     } catch (error) {
-      showMessage(error.message, true);
+      adminMessage.style.color = "#a61b1b";
+      adminMessage.textContent = error.message;
     }
   });
 
   return button;
+}
+
+function setProductMessage(text, isError = false) {
+  productMessage.style.color = isError ? "#a61b1b" : "#0f766e";
+  productMessage.textContent = text;
+}
+
+function clearProductForm() {
+  productEditingId.value = "";
+  productNameInput.value = "";
+  productPriceInput.value = "";
+  productWeightInput.value = "";
+  productTypeInput.value = "";
+  productImageInput.value = "";
+  setProductMessage("");
+}
+
+function populateProductForm(product) {
+  productEditingId.value = product.id;
+  productNameInput.value = product.name || "";
+  productPriceInput.value = product.priceCents ? (Number(product.priceCents) / 100).toFixed(2) : "";
+  productWeightInput.value = product.weightLabel || "";
+  productTypeInput.value = product.typeLabel || "";
+  productImageInput.value = product.imageUrl || "";
+  setProductMessage(`Editing ${product.name}.`);
+}
+
+function renderProductCard(product) {
+  const card = document.createElement("article");
+  card.className = "product-item product-admin-card";
+
+  const main = document.createElement("div");
+  main.className = "product-admin-main";
+
+  const imageWrap = document.createElement("div");
+  imageWrap.className = "product-image-frame";
+
+  if (product.imageUrl) {
+    const img = document.createElement("img");
+    img.className = "product-image";
+    img.src = product.imageUrl;
+    img.alt = product.name;
+    img.loading = "lazy";
+    imageWrap.appendChild(img);
+  } else {
+    const placeholder = document.createElement("div");
+    placeholder.className = "product-image-placeholder";
+    placeholder.textContent = "No image";
+    imageWrap.appendChild(placeholder);
+  }
+
+  const info = document.createElement("div");
+  info.className = "stacked-form";
+
+  const title = document.createElement("h4");
+  title.textContent = product.name;
+
+  const meta = document.createElement("p");
+  meta.className = "product-meta";
+  const parts = [product.id];
+  if (product.weightLabel) {
+    parts.push(product.weightLabel);
+  }
+  if (product.typeLabel) {
+    parts.push(product.typeLabel);
+  }
+  meta.textContent = parts.join(" • ");
+
+  const price = document.createElement("p");
+  price.className = "hint";
+  price.textContent = `Price: ${formatProductPrice(product.priceCents)}`;
+
+  info.appendChild(title);
+  info.appendChild(meta);
+  info.appendChild(price);
+
+  main.appendChild(imageWrap);
+  main.appendChild(info);
+
+  const actions = document.createElement("div");
+  actions.className = "summary-row product-actions";
+
+  const editButton = document.createElement("button");
+  editButton.type = "button";
+  editButton.className = "btn ghost";
+  editButton.textContent = "Edit";
+  editButton.addEventListener("click", () => populateProductForm(product));
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "btn ghost";
+  deleteButton.textContent = "Delete";
+  deleteButton.addEventListener("click", async () => {
+    const confirmed = window.confirm(`Delete ${product.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setProductMessage(`Deleting ${product.name}...`);
+      await adminApi(`/api/admin/products/${encodeURIComponent(product.id)}`, { method: "DELETE" });
+      setProductMessage(`Deleted ${product.name}.`);
+      clearProductForm();
+      await loadAdminData();
+    } catch (error) {
+      setProductMessage(error.message, true);
+    }
+  });
+
+  actions.appendChild(editButton);
+  actions.appendChild(deleteButton);
+
+  card.appendChild(main);
+  card.appendChild(actions);
+  return card;
+}
+
+function renderProducts() {
+  productList.innerHTML = "";
+
+  if (!allProducts.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "No products yet.";
+    productList.appendChild(empty);
+    return;
+  }
+
+  for (const product of allProducts) {
+    productList.appendChild(renderProductCard(product));
+  }
 }
 
 function getVisibleOrders() {
@@ -240,6 +377,10 @@ function buildOrderCard(order) {
     const card = document.createElement("article");
     card.className = "product-item";
 
+    const itemsText = order.items
+      .map((item) => `${item.quantity} x ${item.productName} (${item.lineTotal})`)
+      .join("; ");
+
     const top = document.createElement("div");
     top.className = "summary-row";
 
@@ -248,7 +389,7 @@ function buildOrderCard(order) {
 
     const title = document.createElement("p");
     title.className = "product-meta";
-    title.textContent = `#${order.id} | ${order.total}`;
+    title.textContent = `#${order.id} | ${order.customerName} | ${order.total}`;
 
     const chips = document.createElement("div");
     chips.className = "chip-row";
@@ -283,37 +424,15 @@ function buildOrderCard(order) {
 
     const details = document.createElement("p");
     details.className = "hint";
-    details.textContent = `Name: ${order.customerName} | Phone: ${order.phone} | Created: ${order.createdAt}`;
+    details.textContent = `Phone: ${order.phone} | Created: ${order.createdAt}`;
 
-    const fulfillment = document.createElement("p");
-    fulfillment.className = "hint";
-    fulfillment.textContent = `Order type: ${order.fulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}`;
-
-    const addressLine = document.createElement("p");
-    addressLine.className = "hint";
-    addressLine.textContent = order.fulfillmentMethod === "delivery"
-      ? `Delivery address: ${order.address || "Not provided"}`
-      : "Pickup order";
-
-    const itemsHeading = document.createElement("p");
-    itemsHeading.className = "section-caption";
-    itemsHeading.textContent = "Items";
-
-    const itemsList = document.createElement("ul");
-    itemsList.className = "admin-item-list";
-
-    for (const item of order.items) {
-      const line = document.createElement("li");
-      line.textContent = `${item.quantity} x ${item.productName} (${item.lineTotal})`;
-      itemsList.appendChild(line);
-    }
+    const items = document.createElement("p");
+    items.className = "hint";
+    items.textContent = `Items: ${itemsText}`;
 
     card.appendChild(top);
     card.appendChild(details);
-    card.appendChild(fulfillment);
-    card.appendChild(addressLine);
-    card.appendChild(itemsHeading);
-    card.appendChild(itemsList);
+    card.appendChild(items);
 
     if (order.notes) {
       const notes = document.createElement("p");
@@ -392,135 +511,95 @@ function setTab(nextTab) {
 }
 
 async function loadAdminData() {
-  const summaryData = await adminApi("/api/admin/summary", { method: "GET" });
-  const ordersData = await adminApi("/api/admin/orders?limit=200", { method: "GET" });
+  const [summaryData, ordersData, productsData] = await Promise.all([
+    adminApi("/api/admin/summary", { method: "GET" }),
+    adminApi("/api/admin/orders?limit=200", { method: "GET" }),
+    adminApi("/api/admin/products", { method: "GET" })
+  ]);
 
   allOrders = ordersData.orders || [];
-  renderSummary(summaryData.summary || {}, summaryData.profit || {});
+  allProducts = productsData.products || [];
+  renderSummary(summaryData.summary);
+  renderProducts();
   renderOrders();
-}
-
-async function resetAllOrders() {
-  const confirmed = window.confirm(
-    "This will delete all orders, reset order numbers, and clear admin counts. Type RESET in the next prompt to continue."
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
-  const typed = window.prompt("Type RESET to confirm full data reset.");
-  if (typed !== "RESET") {
-    showMessage("Reset cancelled.");
-    return;
-  }
-
-  showMessage("Resetting all orders...");
-  await adminApi("/api/admin/reset", {
-    method: "POST",
-    body: JSON.stringify({ confirmation: "RESET" })
-  });
-  allOrders = [];
-  ordersWrap.innerHTML = "";
-  renderSummary({
-    totalOrders: 0,
-    awaitingPayment: 0,
-    paid: 0,
-    readyForPickup: 0,
-    completed: 0,
-    cancelled: 0,
-    newOrders: 0,
-    revenuePaid: "$0.00",
-    revenueUnpaid: "$0.00",
-    paidByZelle: "$0.00",
-    paidByCard: "$0.00",
-    paidByCash: "$0.00",
-    awaitingByZelle: "$0.00",
-    awaitingByCard: "$0.00",
-    awaitingByCash: "$0.00"
-  }, {
-    weekly: "$0.00",
-    monthly: "$0.00",
-    season: "$0.00"
-  });
-  showMessage("All orders reset.");
-}
-
-async function checkSessionAndLoad() {
-  try {
-    const sessionData = await adminApi("/api/admin/session", { method: "GET" });
-    if (!sessionData.authenticated) {
-      setAuthenticatedState(false);
-      return;
-    }
-
-    setAuthenticatedState(true);
-    await loadAdminData();
-    showMessage("Signed in.");
-  } catch (error) {
-    setAuthenticatedState(false);
-    showMessage(error.message, true);
-  }
 }
 
 adminForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  showMessage("");
+  adminMessage.textContent = "";
+  adminMessage.style.color = "#a61b1b";
+
+  adminKey = adminKeyInput.value.trim();
+  localStorage.setItem("tigris_admin_key", adminKey);
 
   try {
-    const password = adminPasswordInput.value.trim();
-    await adminApi("/api/admin/login", {
-      method: "POST",
-      body: JSON.stringify({ password })
-    });
-
-    setAuthenticatedState(true);
     await loadAdminData();
-    showMessage("Admin backend loaded.");
+    adminMessage.style.color = "#0f766e";
+    adminMessage.textContent = "Admin backend loaded.";
   } catch (error) {
-    showMessage(error.message, true);
+    adminMessage.textContent = error.message;
   }
 });
 
 refreshButton.addEventListener("click", async () => {
-  if (!isAuthenticated) {
-    showMessage("Please sign in first.", true);
+  if (!adminKey) {
+    adminMessage.style.color = "#a61b1b";
+    adminMessage.textContent = "Enter your admin key first.";
     return;
   }
 
   try {
     await loadAdminData();
-    showMessage("Refreshed.");
+    adminMessage.style.color = "#0f766e";
+    adminMessage.textContent = "Refreshed.";
   } catch (error) {
-    showMessage(error.message, true);
+    adminMessage.style.color = "#a61b1b";
+    adminMessage.textContent = error.message;
   }
 });
 
-logoutButton.addEventListener("click", async () => {
+productForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const editingId = productEditingId.value.trim();
+  const priceValue = Number(productPriceInput.value);
+  const payload = {
+    name: productNameInput.value.trim(),
+    priceCents: Number.isFinite(priceValue) ? Math.round(priceValue * 100) : 0,
+    weightLabel: productWeightInput.value.trim(),
+    typeLabel: productTypeInput.value.trim(),
+    imageUrl: productImageInput.value.trim()
+  };
+
   try {
-    await adminApi("/api/admin/logout", { method: "POST" });
-    setAuthenticatedState(false);
-    allOrders = [];
-    ordersWrap.innerHTML = "";
-    summaryText.textContent = "Not loaded yet.";
-    adminPasswordInput.value = "";
-    adminPasswordInput.disabled = false;
-    showMessage("Logged out.");
+    setProductMessage(editingId ? "Saving product..." : "Creating product...");
+
+    if (editingId) {
+      await adminApi(`/api/admin/products/${encodeURIComponent(editingId)}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload)
+      });
+      setProductMessage(`Updated ${payload.name}.`);
+    } else {
+      await adminApi("/api/admin/products", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      setProductMessage(`Created ${payload.name}.`);
+    }
+
+    clearProductForm();
+    await loadAdminData();
   } catch (error) {
-    showMessage(error.message, true);
+    setProductMessage(error.message, true);
   }
+});
+
+productResetButton.addEventListener("click", () => {
+  clearProductForm();
 });
 
 activeTabButton.addEventListener("click", () => setTab("active"));
 completedTabButton.addEventListener("click", () => setTab("completed"));
-resetButton.addEventListener("click", async () => {
-  try {
-    await resetAllOrders();
-  } catch (error) {
-    showMessage(error.message, true);
-  }
-});
 
 setTab("active");
-setAuthenticatedState(false);
-checkSessionAndLoad();

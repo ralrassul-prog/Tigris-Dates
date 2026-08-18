@@ -9,7 +9,13 @@ const rateLimit = require("express-rate-limit");
 const Stripe = require("stripe");
 
 const db = require("./db");
-const { products, getProductById } = require("./config/products");
+const {
+  listProducts,
+  getProductById,
+  createProduct,
+  updateProduct,
+  deleteProduct
+} = require("./productStore");
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
@@ -91,7 +97,11 @@ function safeCompare(input, expected) {
 }
 
 function getAdminPassword() {
-  return String(process.env.ADMIN_PASSWORD || process.env.ADMIN_API_KEY || "").trim();
+  return String(process.env.ADMIN_PASSWORD || "").trim();
+}
+
+function getAdminApiKey() {
+  return String(process.env.ADMIN_API_KEY || "").trim();
 }
 
 function getAdminSessionSecret() {
@@ -192,11 +202,21 @@ function clearAdminSessionCookie(res) {
 
 function requireAdmin(req, res, next) {
   const expectedPassword = getAdminPassword();
+  const expectedApiKey = getAdminApiKey();
   const expectedSessionSecret = getAdminSessionSecret();
-  if (!expectedPassword || !expectedSessionSecret) {
+  if ((!expectedPassword && !expectedApiKey) || !expectedSessionSecret) {
     return res.status(503).json({
-      error: "Admin auth is not configured. Set ADMIN_PASSWORD and ADMIN_SESSION_SECRET in .env."
+      error: "Admin auth is not configured. Set ADMIN_PASSWORD or ADMIN_API_KEY and ADMIN_SESSION_SECRET in .env."
     });
+  }
+
+  const providedHeaderKey = String(req.headers["x-admin-key"] || "").trim();
+  if (
+    providedHeaderKey &&
+    ((expectedApiKey && safeCompare(providedHeaderKey, expectedApiKey)) ||
+      (expectedPassword && safeCompare(providedHeaderKey, expectedPassword)))
+  ) {
+    return next();
   }
 
   const sessionToken = parseCookies(req)[ADMIN_SESSION_COOKIE];
@@ -754,7 +774,55 @@ app.post("/api/admin/logout", (_req, res) => {
 });
 
 app.get("/api/products", (_req, res) => {
-  return res.json({ products });
+  return res.json({ products: listProducts() });
+});
+
+app.get("/api/admin/products", requireAdmin, (_req, res) => {
+  const products = listProducts();
+  return res.json({ count: products.length, products });
+});
+
+app.post("/api/admin/products", requireAdmin, (req, res) => {
+  const result = createProduct(req.body || {});
+  if (result.error) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  return res.status(201).json({
+    message: "Product created.",
+    product: result.product
+  });
+});
+
+app.patch("/api/admin/products/:productId", requireAdmin, (req, res) => {
+  const productId = String(req.params.productId || "").trim();
+  if (!productId) {
+    return res.status(400).json({ error: "Invalid product id." });
+  }
+
+  const result = updateProduct(productId, req.body || {});
+  if (result.error) {
+    return res.status(result.error === "Product not found." ? 404 : 400).json({ error: result.error });
+  }
+
+  return res.json({
+    message: "Product updated.",
+    product: result.product
+  });
+});
+
+app.delete("/api/admin/products/:productId", requireAdmin, (req, res) => {
+  const productId = String(req.params.productId || "").trim();
+  if (!productId) {
+    return res.status(400).json({ error: "Invalid product id." });
+  }
+
+  const result = deleteProduct(productId);
+  if (result.error) {
+    return res.status(404).json({ error: result.error });
+  }
+
+  return res.json({ message: "Product deleted." });
 });
 
 app.get("/api/orders", (_req, res) => {
