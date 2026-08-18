@@ -69,7 +69,7 @@ body {
 .layout {
   position: relative;
   z-index: 1;
-  max-width: 880px;
+  max-width: 840px;
   margin: 1.4rem auto;
   padding: 0 0.75rem 5.5rem;
   display: grid;
@@ -100,6 +100,27 @@ body {
 .compact-hero {
   display: grid;
   gap: 0.18rem;
+}
+
+.hero-trust-row {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.hero-trust-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 240, 214, 0.5);
+  background: rgba(255, 250, 240, 0.14);
+  color: #fff3db;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  letter-spacing: 0.02em;
 }
 
 .hero-line {
@@ -152,12 +173,21 @@ h3 {
 }
 
 h1 {
-  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  font-size: clamp(1.9rem, 5.4vw, 2.75rem);
 }
 
 .stacked-form {
   display: grid;
   gap: 0.58rem;
+}
+
+.catalog-head {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.catalog-head h3 {
+  margin: 0;
 }
 
 label,
@@ -240,7 +270,7 @@ textarea:focus {
 .product-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem;
+  gap: 0.58rem;
 }
 
 .product-media,
@@ -258,7 +288,7 @@ textarea:focus {
 .product-image {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 2;
   object-fit: cover;
 }
 
@@ -282,9 +312,26 @@ textarea:focus {
 .product-item {
   border: 1px solid rgba(235, 185, 115, 0.8);
   border-radius: 12px;
-  padding: 0.55rem;
+  padding: 0.5rem;
   background: rgba(255, 255, 255, 0.86);
   transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.product-badge {
+  margin: 0 0 0.42rem;
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.16rem 0.48rem;
+  font-size: 0.69rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #fff;
+  background: linear-gradient(135deg, #1c7a60, #135d49);
+}
+
+.product-badge-secondary {
+  background: linear-gradient(135deg, #a55810, #7d3c03);
 }
 
 .customer-page .product-item:hover {
@@ -294,7 +341,8 @@ textarea:focus {
 
 .product-item h4 {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.93rem;
+  line-height: 1.25;
 }
 
 .product-admin-card {
@@ -339,7 +387,7 @@ textarea:focus {
 .product-meta {
   margin: 0.12rem 0 0;
   color: var(--ink-soft);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
 }
 
 .product-item label {
@@ -351,27 +399,27 @@ textarea:focus {
 }
 
 .qty-shell {
-  margin-top: 0.45rem;
+  margin-top: 0.35rem;
   display: grid;
-  grid-template-columns: 44px 1fr 44px;
-  gap: 0.35rem;
+  grid-template-columns: 38px 1fr 38px;
+  gap: 0.3rem;
 }
 
 .qty-btn {
   border: 1px solid #d8af72;
-  border-radius: 10px;
-  background: #fff6e8;
+  border-radius: 9px;
+  background: #fff4de;
   color: var(--brand-dark);
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 700;
-  min-height: 42px;
+  min-height: 38px;
   cursor: pointer;
 }
 
 .qty-input {
   text-align: center;
   font-weight: 700;
-  min-height: 42px;
+  min-height: 38px;
 }
 
 .field-grid {
@@ -425,8 +473,12 @@ textarea:focus {
   background: linear-gradient(135deg, rgba(255, 253, 247, 0.98), rgba(252, 237, 208, 0.98));
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 0.52rem 0.62rem;
+  padding: 0.6rem 0.7rem;
   box-shadow: 0 10px 20px rgba(112, 61, 0, 0.2);
+}
+
+.checkout-row .btn.primary {
+  min-width: 148px;
 }
 
 #orderTotal {
@@ -437,7 +489,7 @@ textarea:focus {
 
 .trust-line {
   margin: 0;
-  font-size: 0.81rem;
+  font-size: 0.84rem;
   color: #5d4322;
   text-align: center;
 }
@@ -658,11 +710,22 @@ select {
 
   .qty-shell {
     grid-template-columns: 46px 1fr 46px;
+    gap: 0.35rem;
+  }
+
+  .qty-btn,
+  .qty-input {
+    min-height: 46px;
+    font-size: 1.12rem;
   }
 
   .btn.primary {
     min-height: 46px;
     min-width: 148px;
+  }
+
+  .checkout-row .btn.primary {
+    width: 100%;
   }
 
   .account-grid {

@@ -330,6 +330,18 @@ function renderProducts() {
     const article = document.createElement("article");
     article.className = "product-item";
 
+    if (product.badgeLabel === "best_seller") {
+      const badge = document.createElement("p");
+      badge.className = "product-badge";
+      badge.textContent = "Best Seller";
+      article.appendChild(badge);
+    } else if (product.badgeLabel === "popular_pick") {
+      const badge = document.createElement("p");
+      badge.className = "product-badge product-badge-secondary";
+      badge.textContent = "Popular Pick";
+      article.appendChild(badge);
+    }
+
     const media = document.createElement("div");
     media.className = "product-media";
 

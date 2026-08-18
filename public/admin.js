@@ -16,6 +16,7 @@ const productWeightInput = document.getElementById("productWeightInput");
 const productTypeInput = document.getElementById("productTypeInput");
 const productFileInput = document.getElementById("productFileInput");
 const productImageInput = document.getElementById("productImageInput");
+const productBadgeInput = document.getElementById("productBadgeInput");
 const productMessage = document.getElementById("productMessage");
 const productList = document.getElementById("productList");
 const resetAccountingButton = document.getElementById("resetAccountingButton");
@@ -304,6 +305,9 @@ function clearProductForm() {
     productFileInput.value = "";
   }
   productImageInput.value = "";
+  if (productBadgeInput) {
+    productBadgeInput.value = "";
+  }
   setProductMessage("");
 }
 
@@ -317,7 +321,20 @@ function populateProductForm(product) {
     productFileInput.value = "";
   }
   productImageInput.value = product.imageUrl || "";
+  if (productBadgeInput) {
+    productBadgeInput.value = product.badgeLabel || "";
+  }
   setProductMessage(`Editing ${product.name}.`);
+}
+
+function badgeLabelToText(badgeLabel) {
+  if (badgeLabel === "best_seller") {
+    return "Best Seller";
+  }
+  if (badgeLabel === "popular_pick") {
+    return "Popular Pick";
+  }
+  return "None";
 }
 
 async function moveProductPosition(productId, direction) {
@@ -388,10 +405,15 @@ function renderProductCard(product) {
   position.className = "hint";
   position.textContent = `Position: ${Number(product.sortOrder || 0)}`;
 
+  const badge = document.createElement("p");
+  badge.className = "hint";
+  badge.textContent = `Badge: ${badgeLabelToText(product.badgeLabel || "")}`;
+
   info.appendChild(title);
   info.appendChild(meta);
   info.appendChild(price);
   info.appendChild(position);
+  info.appendChild(badge);
 
   main.appendChild(imageWrap);
   main.appendChild(info);
@@ -717,7 +739,8 @@ productForm.addEventListener("submit", async (event) => {
     priceCents: Number.isFinite(priceValue) ? Math.round(priceValue * 100) : 0,
     weightLabel: productWeightInput.value.trim(),
     typeLabel: productTypeInput.value.trim(),
-    imageUrl: productImageInput.value.trim()
+    imageUrl: productImageInput.value.trim(),
+    badgeLabel: productBadgeInput?.value || ""
   };
 
   try {
@@ -730,6 +753,7 @@ productForm.addEventListener("submit", async (event) => {
       formData.append("weightLabel", payload.weightLabel);
       formData.append("typeLabel", payload.typeLabel);
       formData.append("imageUrl", payload.imageUrl);
+      formData.append("badgeLabel", payload.badgeLabel);
       formData.append("image", productFileInput.files[0]);
 
       if (editingId) {
