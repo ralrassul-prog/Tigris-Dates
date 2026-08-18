@@ -1029,6 +1029,27 @@ app.patch("/api/admin/orders/:orderId/open", requireAdmin, (req, res) => {
   });
 });
 
+app.delete("/api/admin/orders/:orderId", requireAdmin, (req, res) => {
+  const orderId = Number(req.params.orderId);
+  if (!Number.isInteger(orderId) || orderId < 1) {
+    return res.status(400).json({ error: "Invalid order id." });
+  }
+
+  const existing = db.prepare("SELECT id FROM orders WHERE id = ?").get(orderId);
+  if (!existing) {
+    return res.status(404).json({ error: "Order not found." });
+  }
+
+  const removeOrderTxn = db.transaction(() => {
+    db.prepare("DELETE FROM order_items WHERE order_id = ?").run(orderId);
+    db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
+  });
+
+  removeOrderTxn();
+
+  return res.json({ message: `Order #${orderId} deleted.` });
+});
+
 app.get("/api/admin/summary", requireAdmin, (_req, res) => {
   const totalOrders = db.prepare("SELECT COUNT(*) AS count FROM orders").get().count;
   const awaitingPayment = db.prepare(

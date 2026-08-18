@@ -40,6 +40,9 @@
       <div id="adminProtected" class="hidden stacked-form">
       <section class="card">
         <h3>Account</h3>
+        <div class="summary-row">
+          <button id="resetAccountingButton" class="btn ghost" type="button">Reset Accounting To Zero</button>
+        </div>
         <div id="accountGrid" class="account-grid">
           <article class="metric-card metric-highlight metric-new-orders">
             <p class="metric-label">New Orders</p>
@@ -116,7 +119,6 @@
             <p class="hint">Upload a file to store it on Render, or paste an image URL as a fallback.</p>
           <div class="summary-row">
             <button class="btn primary" type="submit">Save Product</button>
-            <button id="productResetButton" class="btn ghost" type="button">Reset</button>
           </div>
           <p id="productMessage" class="message"></p>
         </form>

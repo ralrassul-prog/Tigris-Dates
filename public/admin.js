@@ -16,9 +16,9 @@ const productWeightInput = document.getElementById("productWeightInput");
 const productTypeInput = document.getElementById("productTypeInput");
 const productFileInput = document.getElementById("productFileInput");
 const productImageInput = document.getElementById("productImageInput");
-const productResetButton = document.getElementById("productResetButton");
 const productMessage = document.getElementById("productMessage");
 const productList = document.getElementById("productList");
+const resetAccountingButton = document.getElementById("resetAccountingButton");
 const paidTotal = document.getElementById("paidTotal");
 const unpaidTotal = document.getElementById("unpaidTotal");
 const paidByZelle = document.getElementById("paidByZelle");
@@ -147,6 +147,50 @@ async function updateOrderStatus(orderId, nextStatus, successMessage) {
   await loadAdminData();
 }
 
+async function deleteOrder(orderId) {
+  const confirmed = window.confirm(`Delete order #${orderId}? This cannot be undone.`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    adminMessage.style.color = "#0f766e";
+    adminMessage.textContent = `Deleting order #${orderId}...`;
+    await adminApi(`/api/admin/orders/${orderId}`, { method: "DELETE" });
+    adminMessage.textContent = `Order #${orderId} deleted.`;
+    await loadAdminData();
+  } catch (error) {
+    adminMessage.style.color = "#a61b1b";
+    adminMessage.textContent = error.message;
+  }
+}
+
+async function resetAccountingToZero() {
+  const confirmWord = window.prompt("Type RESET to clear all orders and zero account totals:");
+  if (confirmWord !== "RESET") {
+    adminMessage.style.color = "#a61b1b";
+    adminMessage.textContent = "Reset cancelled. You must type RESET exactly.";
+    return;
+  }
+
+  try {
+    adminMessage.style.color = "#0f766e";
+    adminMessage.textContent = "Resetting accounting...";
+    await adminApi("/api/admin/reset", {
+      method: "POST",
+      body: JSON.stringify({ confirmation: "RESET" })
+    });
+
+    readyFlags = {};
+    localStorage.removeItem(READY_FLAG_KEY);
+    await loadAdminData();
+    adminMessage.textContent = "Accounting reset to zero. All orders removed.";
+  } catch (error) {
+    adminMessage.style.color = "#a61b1b";
+    adminMessage.textContent = error.message;
+  }
+}
+
 function createStatusSelect(order) {
   const select = document.createElement("select");
   const statuses = [
@@ -231,6 +275,17 @@ function createOpenButton(order) {
     }
   });
 
+  return button;
+}
+
+function createDeleteOrderButton(order) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn ghost";
+  button.textContent = "Delete Order";
+  button.addEventListener("click", () => {
+    deleteOrder(order.id);
+  });
   return button;
 }
 
@@ -465,9 +520,14 @@ function buildOrderCard(order) {
       controls.className = "order-controls";
       controls.appendChild(statusSelect);
       controls.appendChild(createReadyCheckbox(order));
+      controls.appendChild(createDeleteOrderButton(order));
       top.appendChild(controls);
     } else {
-      top.appendChild(createOpenButton(order));
+      const controls = document.createElement("div");
+      controls.className = "order-controls";
+      controls.appendChild(createOpenButton(order));
+      controls.appendChild(createDeleteOrderButton(order));
+      top.appendChild(controls);
     }
 
     const details = document.createElement("p");
@@ -712,8 +772,8 @@ productForm.addEventListener("submit", async (event) => {
   }
 });
 
-productResetButton.addEventListener("click", () => {
-  clearProductForm();
+resetAccountingButton?.addEventListener("click", () => {
+  resetAccountingToZero();
 });
 
 activeTabButton.addEventListener("click", () => setTab("active"));
