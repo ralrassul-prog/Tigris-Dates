@@ -165,16 +165,22 @@ textarea:focus {
   color: #fff;
 }
 
-.admin-fab {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 20;
-  box-shadow: 0 14px 24px rgba(55, 28, 0, 0.24);
+.admin-entry-row {
+  margin: 0;
+  text-align: center;
 }
 
-.admin-fab:hover {
-  transform: translateY(-1px);
+.admin-entry-link {
+  color: #7b674e;
+  font-size: 0.76rem;
+  text-decoration: none;
+  border-bottom: 1px dotted rgba(123, 103, 78, 0.6);
+}
+
+.admin-entry-link:hover,
+.admin-entry-link:focus-visible {
+  color: #5b4a36;
+  border-bottom-color: rgba(91, 74, 54, 0.9);
 }
 
 .top-row,
