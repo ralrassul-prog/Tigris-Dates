@@ -552,6 +552,19 @@ select {
   background: rgba(25, 21, 14, 0.4);
 }
 
+.confirm-item-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.22rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+#orderConfirmMeta {
+  gap: 0.2rem;
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;

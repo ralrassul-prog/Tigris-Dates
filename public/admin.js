@@ -265,6 +265,25 @@ function populateProductForm(product) {
   setProductMessage(`Editing ${product.name}.`);
 }
 
+async function moveProductPosition(productId, direction) {
+  const normalizedDirection = String(direction || "").trim().toLowerCase();
+  const label = normalizedDirection === "up" ? "up" : "down";
+
+  try {
+    setProductMessage(`Moving product ${label}...`);
+    const data = await adminApi(`/api/admin/products/${encodeURIComponent(productId)}/move`, {
+      method: "POST",
+      body: JSON.stringify({ direction: normalizedDirection })
+    });
+
+    allProducts = data.products || [];
+    renderProducts();
+    setProductMessage(data.message || "Product moved.");
+  } catch (error) {
+    setProductMessage(error.message, true);
+  }
+}
+
 function renderProductCard(product) {
   const card = document.createElement("article");
   card.className = "product-item product-admin-card";
@@ -310,9 +329,14 @@ function renderProductCard(product) {
   price.className = "hint";
   price.textContent = `Price: ${formatProductPrice(product.priceCents)}`;
 
+  const position = document.createElement("p");
+  position.className = "hint";
+  position.textContent = `Position: ${Number(product.sortOrder || 0)}`;
+
   info.appendChild(title);
   info.appendChild(meta);
   info.appendChild(price);
+  info.appendChild(position);
 
   main.appendChild(imageWrap);
   main.appendChild(info);
@@ -348,6 +372,24 @@ function renderProductCard(product) {
   });
 
   actions.appendChild(editButton);
+  const moveUpButton = document.createElement("button");
+  moveUpButton.type = "button";
+  moveUpButton.className = "btn ghost";
+  moveUpButton.textContent = "Move Up";
+  moveUpButton.addEventListener("click", () => {
+    moveProductPosition(product.id, "up");
+  });
+
+  const moveDownButton = document.createElement("button");
+  moveDownButton.type = "button";
+  moveDownButton.className = "btn ghost";
+  moveDownButton.textContent = "Move Down";
+  moveDownButton.addEventListener("click", () => {
+    moveProductPosition(product.id, "down");
+  });
+
+  actions.appendChild(moveUpButton);
+  actions.appendChild(moveDownButton);
   actions.appendChild(deleteButton);
 
   card.appendChild(main);

@@ -16,7 +16,8 @@ const {
   getProductById,
   createProduct,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  moveProduct
 } = require("./productStore");
 
 const app = express();
@@ -877,6 +878,27 @@ app.delete("/api/admin/products/:productId", requireAdmin, (req, res) => {
   }
 
   return res.json({ message: "Product deleted." });
+});
+
+app.post("/api/admin/products/:productId/move", requireAdmin, (req, res) => {
+  const productId = String(req.params.productId || "").trim();
+  const direction = String(req.body?.direction || "").trim().toLowerCase();
+  if (!productId) {
+    return res.status(400).json({ error: "Invalid product id." });
+  }
+
+  const result = moveProduct(productId, direction);
+  if (result.error) {
+    const statusCode = result.error === "Product not found." ? 404 : 400;
+    return res.status(statusCode).json({ error: result.error });
+  }
+
+  return res.json({
+    message: result.moved ? "Product moved." : "Product position unchanged.",
+    moved: result.moved,
+    product: result.product,
+    products: listProducts()
+  });
 });
 
 app.get("/api/orders", (_req, res) => {

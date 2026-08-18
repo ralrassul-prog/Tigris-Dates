@@ -7,15 +7,16 @@ function toProduct(row) {
     weightLabel: row.weight_label,
     typeLabel: row.type_label,
     priceCents: row.price_cents,
-    imageUrl: row.image_url || ""
+    imageUrl: row.image_url || "",
+    sortOrder: Number(row.sort_order || 0)
   };
 }
 
 function listProducts() {
   const rows = db.prepare(`
-    SELECT id, name, weight_label, type_label, price_cents, image_url
+    SELECT id, name, weight_label, type_label, price_cents, image_url, sort_order
     FROM products
-    ORDER BY created_at ASC, id ASC
+    ORDER BY sort_order ASC, created_at ASC, id ASC
   `).all();
 
   return rows.map(toProduct);
@@ -27,7 +28,7 @@ function getProductById(productId) {
   }
 
   const row = db.prepare(`
-    SELECT id, name, weight_label, type_label, price_cents, image_url
+    SELECT id, name, weight_label, type_label, price_cents, image_url, sort_order
     FROM products
     WHERE id = ?
   `).get(productId);
@@ -84,16 +85,19 @@ function createProduct(input) {
     suffix += 1;
   }
 
+  const maxSortOrder = db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS value FROM products").get().value;
+
   const result = db.prepare(`
-    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     productId,
     normalized.name,
     normalized.weightLabel,
     normalized.typeLabel,
     normalized.priceCents,
-    normalized.imageUrl
+    normalized.imageUrl,
+    Number(maxSortOrder) + 1
   );
 
   return {
@@ -142,12 +146,52 @@ function deleteProduct(productId) {
   };
 }
 
+function moveProduct(productId, direction) {
+  const normalizedDirection = String(direction || "").trim().toLowerCase();
+  if (normalizedDirection !== "up" && normalizedDirection !== "down") {
+    return { error: "Direction must be up or down." };
+  }
+
+  const rows = db.prepare(`
+    SELECT id, sort_order
+    FROM products
+    ORDER BY sort_order ASC, created_at ASC, id ASC
+  `).all();
+
+  const currentIndex = rows.findIndex((row) => row.id === productId);
+  if (currentIndex < 0) {
+    return { error: "Product not found." };
+  }
+
+  const targetIndex = normalizedDirection === "up" ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex < 0 || targetIndex >= rows.length) {
+    return { moved: false, product: getProductById(productId) };
+  }
+
+  const currentRow = rows[currentIndex];
+  const targetRow = rows[targetIndex];
+  const swapOrder = db.prepare("UPDATE products SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+  const swapTxn = db.transaction(() => {
+    swapOrder.run(-1, currentRow.id);
+    swapOrder.run(currentRow.sort_order, targetRow.id);
+    swapOrder.run(targetRow.sort_order, currentRow.id);
+  });
+
+  swapTxn();
+
+  return {
+    moved: true,
+    product: getProductById(productId)
+  };
+}
+
 module.exports = {
   listProducts,
   getProductById,
   createProduct,
   updateProduct,
   deleteProduct,
+  moveProduct,
   normalizeProductInput,
   slugifyProductId
 };

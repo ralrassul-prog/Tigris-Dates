@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS products (
   type_label TEXT NOT NULL DEFAULT '',
   price_cents INTEGER NOT NULL,
   image_url TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -89,6 +90,7 @@ const hasProductWeightLabel = productColumns.some((col) => col.name === "weight_
 const hasProductTypeLabel = productColumns.some((col) => col.name === "type_label");
 const hasProductPriceCents = productColumns.some((col) => col.name === "price_cents");
 const hasProductImageUrl = productColumns.some((col) => col.name === "image_url");
+const hasProductSortOrder = productColumns.some((col) => col.name === "sort_order");
 const hasProductUpdatedAt = productColumns.some((col) => col.name === "updated_at");
 
 if (!hasProductWeightLabel) {
@@ -107,6 +109,25 @@ if (!hasProductImageUrl) {
   db.exec("ALTER TABLE products ADD COLUMN image_url TEXT NOT NULL DEFAULT ''");
 }
 
+if (!hasProductSortOrder) {
+  db.exec("ALTER TABLE products ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
+
+  const existingRows = db.prepare(`
+    SELECT id
+    FROM products
+    ORDER BY created_at ASC, id ASC
+  `).all();
+
+  const setOrder = db.prepare("UPDATE products SET sort_order = ? WHERE id = ?");
+  const setOrderTxn = db.transaction(() => {
+    existingRows.forEach((row, index) => {
+      setOrder.run(index + 1, row.id);
+    });
+  });
+
+  setOrderTxn();
+}
+
 if (!hasProductUpdatedAt) {
   db.exec("ALTER TABLE products ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
 }
@@ -114,21 +135,22 @@ if (!hasProductUpdatedAt) {
 const existingProductCount = db.prepare("SELECT COUNT(*) AS count FROM products").get().count;
 if (!hadProductsTable && existingProductCount === 0 && Array.isArray(seedProducts) && seedProducts.length > 0) {
   const insertSeedProduct = db.prepare(`
-    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
   const seedTransaction = db.transaction(() => {
-    for (const product of seedProducts) {
+    seedProducts.forEach((product, index) => {
       insertSeedProduct.run(
         product.id,
         product.name,
         product.weightLabel || "",
         product.typeLabel || "",
         product.priceCents,
-        product.imageUrl || ""
+        product.imageUrl || "",
+        index + 1
       );
-    }
+    });
   });
 
   seedTransaction();

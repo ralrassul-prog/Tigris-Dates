@@ -18,6 +18,8 @@ const orderSummaryText = document.getElementById("orderSummaryText");
 const closeSummaryButton = document.getElementById("closeSummaryButton");
 const orderConfirmDialog = document.getElementById("orderConfirmDialog");
 const orderConfirmText = document.getElementById("orderConfirmText");
+const orderConfirmItems = document.getElementById("orderConfirmItems");
+const orderConfirmMeta = document.getElementById("orderConfirmMeta");
 const confirmOrderButton = document.getElementById("confirmOrderButton");
 const cancelOrderButton = document.getElementById("cancelOrderButton");
 const submitButton = orderForm.querySelector("button[type='submit']");
@@ -212,16 +214,70 @@ function buildSummaryText({ items, paymentLabel, fulfillmentMethod, address, tot
   return lines.join("\n");
 }
 
-async function askOrderConfirmation(text) {
-  if (!text) {
+function buildConfirmFallbackText(details) {
+  const lines = ["Please confirm your order details:"];
+  const items = Array.isArray(details?.items) ? details.items : [];
+
+  if (items.length) {
+    lines.push("");
+    items.forEach((item, index) => lines.push(`${index + 1}. ${item}`));
+  }
+
+  lines.push("");
+  lines.push(`Payment: ${details.paymentLabel}`);
+  lines.push(`Fulfillment: ${details.fulfillmentLabel}`);
+  if (details.address) {
+    lines.push(`Address: ${details.address}`);
+  }
+  lines.push(`Total: ${details.totalLabel}`);
+
+  return lines.join("\n");
+}
+
+function renderOrderConfirmation(details) {
+  orderConfirmText.textContent = "Please confirm your order details:";
+  orderConfirmItems.innerHTML = "";
+  orderConfirmMeta.innerHTML = "";
+
+  for (const itemText of details.items) {
+    const li = document.createElement("li");
+    li.textContent = itemText;
+    orderConfirmItems.appendChild(li);
+  }
+
+  const payment = document.createElement("p");
+  payment.textContent = `Payment: ${details.paymentLabel}`;
+  const fulfillment = document.createElement("p");
+  fulfillment.textContent = `Fulfillment: ${details.fulfillmentLabel}`;
+  orderConfirmMeta.appendChild(payment);
+  orderConfirmMeta.appendChild(fulfillment);
+
+  if (details.address) {
+    const address = document.createElement("p");
+    address.textContent = `Address: ${details.address}`;
+    orderConfirmMeta.appendChild(address);
+  }
+
+  const total = document.createElement("p");
+  total.textContent = `Total: ${details.totalLabel}`;
+  orderConfirmMeta.appendChild(total);
+}
+
+async function askOrderConfirmation(details) {
+  if (!details || !Array.isArray(details.items) || !details.items.length) {
     return false;
   }
 
-  if (!orderConfirmDialog || typeof orderConfirmDialog.showModal !== "function") {
-    return window.confirm(text);
+  if (
+    !orderConfirmDialog ||
+    typeof orderConfirmDialog.showModal !== "function" ||
+    !orderConfirmItems ||
+    !orderConfirmMeta
+  ) {
+    return window.confirm(buildConfirmFallbackText(details));
   }
 
-  orderConfirmText.textContent = text;
+  renderOrderConfirmation(details);
 
   return new Promise((resolve) => {
     const finish = (confirmed) => {
@@ -378,21 +434,15 @@ async function submitOrder(event) {
       ? "Zelle"
       : "Cash";
   const breakdown = computeCheckoutBreakdown(items);
-  const totalLabel = selectedPayment === "card"
-    ? money(breakdown.totalCents)
-    : money(breakdown.totalCents);
-  const confirmText = [
-    "Please confirm your order details:",
-    "",
-    ...summaryItems.map((item, idx) => `${idx + 1}. ${item}`),
-    "",
-    `Payment: ${paymentLabel}`,
-    `Fulfillment: ${selectedFulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}`,
-    ...(selectedFulfillmentMethod === "delivery" && address ? [`Address: ${address}`] : []),
-    `Total: ${totalLabel}`
-  ].join("\n");
-
-  const confirmed = await askOrderConfirmation(confirmText);
+  const totalLabel = money(breakdown.totalCents);
+  const fulfillmentLabel = selectedFulfillmentMethod === "delivery" ? "Delivery" : "Pickup";
+  const confirmed = await askOrderConfirmation({
+    items: summaryItems,
+    paymentLabel,
+    fulfillmentLabel,
+    address: selectedFulfillmentMethod === "delivery" ? address : "",
+    totalLabel
+  });
   if (!confirmed) {
     return;
   }
