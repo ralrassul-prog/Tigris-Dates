@@ -237,21 +237,11 @@ function clearAdminSessionCookie(res) {
 
 function requireAdmin(req, res, next) {
   const expectedPassword = getAdminPassword();
-  const expectedApiKey = getAdminApiKey();
   const expectedSessionSecret = getAdminSessionSecret();
-  if ((!expectedPassword && !expectedApiKey) || !expectedSessionSecret) {
+  if (!expectedPassword || !expectedSessionSecret) {
     return res.status(503).json({
-      error: "Admin auth is not configured. Set ADMIN_PASSWORD or ADMIN_API_KEY and ADMIN_SESSION_SECRET in .env."
+      error: "Admin auth is not configured. Set ADMIN_PASSWORD and ADMIN_SESSION_SECRET in .env."
     });
-  }
-
-  const providedHeaderKey = String(req.headers["x-admin-key"] || "").trim();
-  if (
-    providedHeaderKey &&
-    ((expectedApiKey && safeCompare(providedHeaderKey, expectedApiKey)) ||
-      (expectedPassword && safeCompare(providedHeaderKey, expectedPassword)))
-  ) {
-    return next();
   }
 
   const sessionToken = parseCookies(req)[ADMIN_SESSION_COOKIE];

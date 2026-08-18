@@ -1,9 +1,10 @@
 const adminForm = document.getElementById("adminForm");
-const adminKeyInput = document.getElementById("adminKeyInput");
+const adminPasswordInput = document.getElementById("adminPasswordInput");
 const adminMessage = document.getElementById("adminMessage");
 const summaryText = document.getElementById("summaryText");
 const ordersWrap = document.getElementById("ordersWrap");
 const refreshButton = document.getElementById("refreshButton");
+const logoutButton = document.getElementById("logoutButton");
 const activeTabButton = document.getElementById("activeTabButton");
 const completedTabButton = document.getElementById("completedTabButton");
 const productForm = document.getElementById("productForm");
@@ -27,7 +28,7 @@ const awaitingByCard = document.getElementById("awaitingByCard");
 const awaitingByCash = document.getElementById("awaitingByCash");
 const newOrdersCount = document.getElementById("newOrdersCount");
 
-let adminKey = localStorage.getItem("tigris_admin_key") || "";
+let isAuthenticated = false;
 let currentTab = "active";
 let allOrders = [];
 let allProducts = [];
@@ -40,17 +41,13 @@ try {
   readyFlags = {};
 }
 
-if (adminKey) {
-  adminKeyInput.value = adminKey;
-}
-
 async function adminApi(path, options = {}) {
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const response = await fetch(path, {
     ...options,
+    credentials: "include",
     headers: {
       ...(!isFormData ? { "Content-Type": "application/json" } : {}),
-      "x-admin-key": adminKey,
       ...(options.headers || {})
     }
   });
@@ -532,27 +529,52 @@ async function loadAdminData() {
   renderOrders();
 }
 
+async function checkAdminSession() {
+  try {
+    const data = await adminApi("/api/admin/session", { method: "GET" });
+    isAuthenticated = Boolean(data.authenticated);
+  } catch (_error) {
+    isAuthenticated = false;
+  }
+
+  return isAuthenticated;
+}
+
+function setAdminSignedOutState(message = "Please sign in.") {
+  isAuthenticated = false;
+  allOrders = [];
+  allProducts = [];
+  renderOrders();
+  renderProducts();
+  adminMessage.style.color = "#a61b1b";
+  adminMessage.textContent = message;
+}
+
 adminForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   adminMessage.textContent = "";
   adminMessage.style.color = "#a61b1b";
 
-  adminKey = adminKeyInput.value.trim();
-  localStorage.setItem("tigris_admin_key", adminKey);
-
   try {
+    await adminApi("/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify({ password: adminPasswordInput.value.trim() })
+    });
+
     await loadAdminData();
+    isAuthenticated = true;
     adminMessage.style.color = "#0f766e";
     adminMessage.textContent = "Admin backend loaded.";
   } catch (error) {
+    isAuthenticated = false;
     adminMessage.textContent = error.message;
   }
 });
 
 refreshButton.addEventListener("click", async () => {
-  if (!adminKey) {
+  if (!isAuthenticated) {
     adminMessage.style.color = "#a61b1b";
-    adminMessage.textContent = "Enter your admin key first.";
+    adminMessage.textContent = "Sign in first.";
     return;
   }
 
@@ -560,6 +582,16 @@ refreshButton.addEventListener("click", async () => {
     await loadAdminData();
     adminMessage.style.color = "#0f766e";
     adminMessage.textContent = "Refreshed.";
+  } catch (error) {
+    adminMessage.style.color = "#a61b1b";
+    adminMessage.textContent = error.message;
+  }
+});
+
+logoutButton.addEventListener("click", async () => {
+  try {
+    await adminApi("/api/admin/logout", { method: "POST" });
+    setAdminSignedOutState("Signed out.");
   } catch (error) {
     adminMessage.style.color = "#a61b1b";
     adminMessage.textContent = error.message;
@@ -640,3 +672,18 @@ activeTabButton.addEventListener("click", () => setTab("active"));
 completedTabButton.addEventListener("click", () => setTab("completed"));
 
 setTab("active");
+checkAdminSession().then(async (authed) => {
+  if (!authed) {
+    setAdminSignedOutState("Please sign in with admin password.");
+    return;
+  }
+
+  try {
+    await loadAdminData();
+    adminMessage.style.color = "#0f766e";
+    adminMessage.textContent = "Admin backend loaded.";
+  } catch (error) {
+    adminMessage.style.color = "#a61b1b";
+    adminMessage.textContent = error.message;
+  }
+});

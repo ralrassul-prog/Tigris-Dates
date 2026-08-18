@@ -25,12 +25,13 @@
       <section class="card">
         <form id="adminForm" class="stacked-form">
           <label>
-            Admin API Key
-            <input id="adminKeyInput" type="password" placeholder="Enter your ADMIN_API_KEY" required />
+            Admin Password
+            <input id="adminPasswordInput" type="password" placeholder="Enter your ADMIN_PASSWORD" required />
           </label>
           <div class="summary-row">
-            <button class="btn primary" type="submit">Load Orders</button>
+            <button class="btn primary" type="submit">Sign In</button>
             <button id="refreshButton" class="btn ghost" type="button">Refresh</button>
+            <button id="logoutButton" class="btn ghost" type="button">Logout</button>
           </div>
           <p id="adminMessage" class="message"></p>
         </form>
