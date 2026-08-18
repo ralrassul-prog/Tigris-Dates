@@ -10,6 +10,7 @@
   --card: #fffcf4;
   --line: #ebb973;
   --danger: #a61b1b;
+  --customer-bg-image: url("/images/date-grove.jpg");
 }
 
 * {
@@ -21,10 +22,34 @@ body {
   min-height: 100vh;
   font-family: "Space Grotesk", sans-serif;
   color: var(--ink);
+  background: linear-gradient(145deg, var(--bg-cream), var(--bg-sand));
+}
+
+.customer-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.customer-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background-image: var(--customer-bg-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: scale(1.03);
+}
+
+.customer-page::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background:
-    radial-gradient(circle at 8% 8%, rgba(217, 109, 16, 0.3), transparent 36%),
-    radial-gradient(circle at 90% 18%, rgba(23, 111, 103, 0.19), transparent 44%),
-    linear-gradient(145deg, var(--bg-cream), var(--bg-sand));
+    radial-gradient(circle at 50% -20%, rgba(252, 236, 201, 0.45), transparent 56%),
+    linear-gradient(180deg, rgba(30, 20, 8, 0.28), rgba(30, 20, 8, 0.5));
 }
 
 .background-glow {
@@ -38,31 +63,38 @@ body {
     rgba(255, 255, 255, 0) 8px,
     rgba(255, 255, 255, 0) 18px
   );
-  opacity: 0.28;
+  opacity: 0.18;
 }
 
 .layout {
   position: relative;
   z-index: 1;
-  max-width: 760px;
-  margin: 1.1rem auto;
+  max-width: 880px;
+  margin: 1.4rem auto;
   padding: 0 0.75rem 5.5rem;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.9rem;
 }
 
 .card {
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: rgba(255, 252, 244, 0.9);
+  border: 1px solid rgba(235, 185, 115, 0.72);
   border-radius: 18px;
   padding: 0.85rem;
-  box-shadow: 0 12px 30px rgba(131, 72, 0, 0.16);
+  box-shadow: 0 18px 36px rgba(18, 13, 8, 0.23);
+  backdrop-filter: blur(6px);
   animation: rise-in 300ms ease both;
 }
 
 .hero {
   text-align: center;
-  padding: 1rem;
+  padding: 1.1rem;
+}
+
+.customer-page .hero.card {
+  background: linear-gradient(120deg, rgba(45, 33, 17, 0.78), rgba(122, 69, 17, 0.64));
+  border-color: rgba(255, 235, 199, 0.35);
+  box-shadow: 0 22px 42px rgba(16, 10, 5, 0.4);
 }
 
 .compact-hero {
@@ -80,7 +112,7 @@ body {
   margin: 0;
   font-family: "Fraunces", serif;
   font-size: 1.1rem;
-  color: #8e3d01;
+  color: #ffe7b9;
 }
 
 .season-line {
@@ -94,7 +126,20 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 0.74rem;
-  color: var(--ink-soft);
+  color: #f3debc;
+}
+
+.customer-page h1 {
+  color: #fff8ea;
+  text-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+}
+
+.customer-page .hero p {
+  color: #f8e5c4;
+}
+
+.customer-page .app-card {
+  background: rgba(255, 250, 240, 0.93);
 }
 
 h1,
@@ -235,10 +280,16 @@ textarea:focus {
 }
 
 .product-item {
-  border: 1px solid var(--line);
+  border: 1px solid rgba(235, 185, 115, 0.8);
   border-radius: 12px;
   padding: 0.55rem;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.86);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.customer-page .product-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(55, 33, 8, 0.16);
 }
 
 .product-item h4 {
@@ -371,7 +422,7 @@ textarea:focus {
 .checkout-row {
   position: sticky;
   bottom: 0.6rem;
-  background: linear-gradient(135deg, rgba(255, 253, 247, 0.98), rgba(254, 245, 227, 0.98));
+  background: linear-gradient(135deg, rgba(255, 253, 247, 0.98), rgba(252, 237, 208, 0.98));
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 0.52rem 0.62rem;
@@ -387,7 +438,7 @@ textarea:focus {
 .trust-line {
   margin: 0;
   font-size: 0.81rem;
-  color: #6f532f;
+  color: #5d4322;
   text-align: center;
 }
 
@@ -552,6 +603,14 @@ select {
   color: var(--ink);
 }
 
+.customer-page .hero.card {
+  animation-delay: 40ms;
+}
+
+.customer-page .app-card.card {
+  animation-delay: 120ms;
+}
+
 .order-confirm-dialog::backdrop,
 .order-summary-dialog::backdrop,
 .season-notice-dialog::backdrop {
@@ -622,9 +681,9 @@ select {
     row-gap: 0.28rem;
   }
 
-  .admin-fab {
-    right: 0.8rem;
-    bottom: 0.8rem;
+  .customer-page::before {
+    background-attachment: scroll;
+    transform: scale(1.01);
   }
 
 }
