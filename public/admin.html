@@ -81,6 +81,14 @@
 
       <section class="card">
         <h3>Products</h3>
+        <div class="stacked-form">
+          <div>
+            <p class="section-caption">Current Products</p>
+            <p class="hint">Edit or delete an existing product below.</p>
+          </div>
+          <div id="productList" class="stacked-form"></div>
+        </div>
+        <hr class="section-divider" />
         <form id="productForm" class="stacked-form">
           <input id="productEditingId" type="hidden" />
           <div class="field-grid">
@@ -118,7 +126,6 @@
           </div>
           <p id="productMessage" class="message"></p>
         </form>
-        <div id="productList" class="stacked-form"></div>
       </section>
 
       <section class="card">
