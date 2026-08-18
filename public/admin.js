@@ -1,6 +1,7 @@
 const adminForm = document.getElementById("adminForm");
 const adminPasswordInput = document.getElementById("adminPasswordInput");
 const adminMessage = document.getElementById("adminMessage");
+const adminProtected = document.getElementById("adminProtected");
 const summaryText = document.getElementById("summaryText");
 const ordersWrap = document.getElementById("ordersWrap");
 const refreshButton = document.getElementById("refreshButton");
@@ -544,6 +545,7 @@ function setAdminSignedOutState(message = "Please sign in.") {
   isAuthenticated = false;
   allOrders = [];
   allProducts = [];
+  adminProtected.classList.add("hidden");
   renderOrders();
   renderProducts();
   adminMessage.style.color = "#a61b1b";
@@ -563,10 +565,12 @@ adminForm.addEventListener("submit", async (event) => {
 
     await loadAdminData();
     isAuthenticated = true;
+    adminProtected.classList.remove("hidden");
     adminMessage.style.color = "#0f766e";
     adminMessage.textContent = "Admin backend loaded.";
   } catch (error) {
     isAuthenticated = false;
+    adminProtected.classList.add("hidden");
     adminMessage.textContent = error.message;
   }
 });
@@ -580,9 +584,11 @@ refreshButton.addEventListener("click", async () => {
 
   try {
     await loadAdminData();
+    adminProtected.classList.remove("hidden");
     adminMessage.style.color = "#0f766e";
     adminMessage.textContent = "Refreshed.";
   } catch (error) {
+    adminProtected.classList.add("hidden");
     adminMessage.style.color = "#a61b1b";
     adminMessage.textContent = error.message;
   }
@@ -680,9 +686,11 @@ checkAdminSession().then(async (authed) => {
 
   try {
     await loadAdminData();
+    adminProtected.classList.remove("hidden");
     adminMessage.style.color = "#0f766e";
     adminMessage.textContent = "Admin backend loaded.";
   } catch (error) {
+    adminProtected.classList.add("hidden");
     adminMessage.style.color = "#a61b1b";
     adminMessage.textContent = error.message;
   }

@@ -535,6 +535,23 @@ select {
   accent-color: #176f67;
 }
 
+.order-confirm-dialog,
+.order-summary-dialog,
+.season-notice-dialog {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.75rem;
+  width: min(560px, calc(100vw - 1.4rem));
+  background: var(--card);
+  color: var(--ink);
+}
+
+.order-confirm-dialog::backdrop,
+.order-summary-dialog::backdrop,
+.season-notice-dialog::backdrop {
+  background: rgba(25, 21, 14, 0.4);
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;

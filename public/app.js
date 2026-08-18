@@ -16,6 +16,10 @@ const closeSeasonNoticeButton = document.getElementById("closeSeasonNoticeButton
 const orderSummaryDialog = document.getElementById("orderSummaryDialog");
 const orderSummaryText = document.getElementById("orderSummaryText");
 const closeSummaryButton = document.getElementById("closeSummaryButton");
+const orderConfirmDialog = document.getElementById("orderConfirmDialog");
+const orderConfirmText = document.getElementById("orderConfirmText");
+const confirmOrderButton = document.getElementById("confirmOrderButton");
+const cancelOrderButton = document.getElementById("cancelOrderButton");
 const submitButton = orderForm.querySelector("button[type='submit']");
 const DELIVERY_FEE_CENTS = 500;
 const CARD_FEE_PERCENT = 0.029;
@@ -208,6 +212,49 @@ function buildSummaryText({ items, paymentLabel, fulfillmentMethod, address, tot
   return lines.join("\n");
 }
 
+async function askOrderConfirmation(text) {
+  if (!text) {
+    return false;
+  }
+
+  if (!orderConfirmDialog || typeof orderConfirmDialog.showModal !== "function") {
+    return window.confirm(text);
+  }
+
+  orderConfirmText.textContent = text;
+
+  return new Promise((resolve) => {
+    const finish = (confirmed) => {
+      confirmOrderButton.removeEventListener("click", onConfirm);
+      cancelOrderButton.removeEventListener("click", onCancel);
+      orderConfirmDialog.removeEventListener("cancel", onCancelEvent);
+      orderConfirmDialog.removeEventListener("click", onBackdropClick);
+      if (orderConfirmDialog.open) {
+        orderConfirmDialog.close();
+      }
+      resolve(confirmed);
+    };
+
+    const onConfirm = () => finish(true);
+    const onCancel = () => finish(false);
+    const onCancelEvent = (event) => {
+      event.preventDefault();
+      finish(false);
+    };
+    const onBackdropClick = (event) => {
+      if (event.target === orderConfirmDialog) {
+        finish(false);
+      }
+    };
+
+    confirmOrderButton.addEventListener("click", onConfirm);
+    cancelOrderButton.addEventListener("click", onCancel);
+    orderConfirmDialog.addEventListener("cancel", onCancelEvent);
+    orderConfirmDialog.addEventListener("click", onBackdropClick);
+    orderConfirmDialog.showModal();
+  });
+}
+
 function updateFulfillmentUI() {
   const fulfillmentMethod = getSelectedFulfillmentMethod();
   const isDelivery = fulfillmentMethod === "delivery";
@@ -317,13 +364,43 @@ async function submitOrder(event) {
   const selectedPayment = getSelectedPaymentMethod();
   const selectedFulfillmentMethod = getSelectedFulfillmentMethod();
   const items = getCartItems();
+  const address = deliveryAddressInput.value.trim();
+
+  if (!items.length) {
+    orderMessage.textContent = "Please select at least one product.";
+    return;
+  }
+
+  const summaryItems = items.map((item) => `${item.quantity} x ${getItemName(item.productId)}`);
+  const paymentLabel = selectedPayment === "card"
+    ? "Card"
+    : selectedPayment === "zelle"
+      ? "Zelle"
+      : "Cash";
+  const breakdown = computeCheckoutBreakdown(items);
+  const totalLabel = selectedPayment === "card"
+    ? money(breakdown.totalCents)
+    : money(breakdown.totalCents);
+  const confirmText = [
+    "Please confirm your order details:",
+    "",
+    ...summaryItems.map((item, idx) => `${idx + 1}. ${item}`),
+    "",
+    `Payment: ${paymentLabel}`,
+    `Fulfillment: ${selectedFulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}`,
+    ...(selectedFulfillmentMethod === "delivery" && address ? [`Address: ${address}`] : []),
+    `Total: ${totalLabel}`
+  ].join("\n");
+
+  const confirmed = await askOrderConfirmation(confirmText);
+  if (!confirmed) {
+    return;
+  }
 
   submitButton.disabled = true;
   submitButton.textContent = "Placing...";
 
   try {
-    const address = deliveryAddressInput.value.trim();
-
     const data = await api("/api/orders", {
       method: "POST",
       body: JSON.stringify({
@@ -358,12 +435,6 @@ async function submitOrder(event) {
       whatsappLink.classList.remove("hidden");
     }
 
-    const summaryItems = items.map((item) => `${item.quantity} x ${getItemName(item.productId)}`);
-    const paymentLabel = selectedPayment === "card"
-      ? "Card"
-      : selectedPayment === "zelle"
-        ? "Zelle"
-        : "Cash";
     openSummaryDialog(buildSummaryText({
       items: summaryItems,
       paymentLabel,
