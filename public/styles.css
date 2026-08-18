@@ -245,11 +245,21 @@ textarea:focus {
   gap: 0.55rem;
 }
 
+.product-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.7rem;
+}
+
 .product-admin-main {
   display: grid;
-  grid-template-columns: 112px 1fr;
+  grid-template-columns: 1fr;
   gap: 0.6rem;
   align-items: start;
+}
+
+.product-admin-card .product-image-frame {
+  width: 100%;
 }
 
 .product-admin-main .stacked-form {
@@ -263,6 +273,10 @@ textarea:focus {
 
 .product-actions {
   justify-content: flex-end;
+}
+
+.product-actions .btn {
+  min-width: 72px;
 }
 
 .product-meta {
