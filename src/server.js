@@ -1,11 +1,13 @@
 require("dotenv").config();
 
+const fs = require("fs");
 const crypto = require("crypto");
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const multer = require("multer");
 const Stripe = require("stripe");
 
 const db = require("./db");
@@ -34,6 +36,33 @@ const CARD_FEE_PERCENT = (() => {
 })();
 const ADMIN_SESSION_COOKIE = "tigris_admin_session";
 const ADMIN_SESSION_TTL_MS = 1000 * 60 * 60 * 12;
+const uploadDir = path.join(__dirname, "..", "data", "uploads");
+
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const imageStorage = multer.diskStorage({
+  destination: (_req, _file, callback) => callback(null, uploadDir),
+  filename: (_req, file, callback) => {
+    const safeExtension = path.extname(file.originalname || "").toLowerCase();
+    const extension = safeExtension && safeExtension.length <= 10 ? safeExtension : "";
+    const uniqueName = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${extension}`;
+    callback(null, uniqueName);
+  }
+});
+
+const uploadImage = multer({
+  storage: imageStorage,
+  limits: {
+    fileSize: 8 * 1024 * 1024
+  },
+  fileFilter: (_req, file, callback) => {
+    if (!file.mimetype || !file.mimetype.startsWith("image/")) {
+      return callback(new Error("Please upload an image file."));
+    }
+
+    return callback(null, true);
+  }
+});
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -64,6 +93,12 @@ app.use((req, res, next) => {
 
   return res.redirect(`https://${req.headers.host}${req.originalUrl}`);
 });
+
+app.use("/uploads", express.static(uploadDir, {
+  index: false,
+  fallthrough: false,
+  maxAge: process.env.NODE_ENV === "production" ? "7d" : 0
+}));
 
 const allowedOrderStatuses = new Set([
   "awaiting_card_payment",
@@ -225,6 +260,35 @@ function requireAdmin(req, res, next) {
   }
 
   return next();
+}
+
+function productUploadMiddleware(req, res, next) {
+  uploadImage.single("image")(req, res, (error) => {
+    if (error) {
+      return res.status(400).json({ error: error.message || "Unable to upload image." });
+    }
+
+    return next();
+  });
+}
+
+function getProductImageUrl(req) {
+  if (req.file && req.file.filename) {
+    return `/uploads/${req.file.filename}`;
+  }
+
+  return String(req.body?.imageUrl || "").trim();
+}
+
+function getProductRequestBody(req) {
+  return {
+    id: String(req.body?.id || "").trim(),
+    name: String(req.body?.name || "").trim(),
+    weightLabel: String(req.body?.weightLabel || "").trim(),
+    typeLabel: String(req.body?.typeLabel || "").trim(),
+    priceCents: req.body?.priceCents ?? req.body?.price ?? 0,
+    imageUrl: getProductImageUrl(req)
+  };
 }
 
 function formatUsd(cents) {
@@ -782,8 +846,8 @@ app.get("/api/admin/products", requireAdmin, (_req, res) => {
   return res.json({ count: products.length, products });
 });
 
-app.post("/api/admin/products", requireAdmin, (req, res) => {
-  const result = createProduct(req.body || {});
+app.post("/api/admin/products", requireAdmin, productUploadMiddleware, (req, res) => {
+  const result = createProduct(getProductRequestBody(req));
   if (result.error) {
     return res.status(400).json({ error: result.error });
   }
@@ -794,13 +858,13 @@ app.post("/api/admin/products", requireAdmin, (req, res) => {
   });
 });
 
-app.patch("/api/admin/products/:productId", requireAdmin, (req, res) => {
+app.patch("/api/admin/products/:productId", requireAdmin, productUploadMiddleware, (req, res) => {
   const productId = String(req.params.productId || "").trim();
   if (!productId) {
     return res.status(400).json({ error: "Invalid product id." });
   }
 
-  const result = updateProduct(productId, req.body || {});
+  const result = updateProduct(productId, getProductRequestBody(req));
   if (result.error) {
     return res.status(result.error === "Product not found." ? 404 : 400).json({ error: result.error });
   }

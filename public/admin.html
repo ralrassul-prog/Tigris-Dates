@@ -102,11 +102,16 @@
               Type label
               <input id="productTypeInput" type="text" placeholder="Mix" />
             </label>
+             <label>
+               Image file
+               <input id="productFileInput" type="file" accept="image/*" />
+             </label>
           </div>
           <label>
             Image URL
             <input id="productImageInput" type="url" placeholder="https://example.com/image.jpg" />
           </label>
+            <p class="hint">Upload a file to store it on Render, or paste an image URL as a fallback.</p>
           <div class="summary-row">
             <button class="btn primary" type="submit">Save Product</button>
             <button id="productResetButton" class="btn ghost" type="button">Reset</button>

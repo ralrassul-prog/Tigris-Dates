@@ -12,6 +12,7 @@ const productNameInput = document.getElementById("productNameInput");
 const productPriceInput = document.getElementById("productPriceInput");
 const productWeightInput = document.getElementById("productWeightInput");
 const productTypeInput = document.getElementById("productTypeInput");
+const productFileInput = document.getElementById("productFileInput");
 const productImageInput = document.getElementById("productImageInput");
 const productResetButton = document.getElementById("productResetButton");
 const productMessage = document.getElementById("productMessage");
@@ -44,10 +45,11 @@ if (adminKey) {
 }
 
 async function adminApi(path, options = {}) {
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const response = await fetch(path, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(!isFormData ? { "Content-Type": "application/json" } : {}),
       "x-admin-key": adminKey,
       ...(options.headers || {})
     }
@@ -245,6 +247,9 @@ function clearProductForm() {
   productPriceInput.value = "";
   productWeightInput.value = "";
   productTypeInput.value = "";
+  if (productFileInput) {
+    productFileInput.value = "";
+  }
   productImageInput.value = "";
   setProductMessage("");
 }
@@ -255,6 +260,9 @@ function populateProductForm(product) {
   productPriceInput.value = product.priceCents ? (Number(product.priceCents) / 100).toFixed(2) : "";
   productWeightInput.value = product.weightLabel || "";
   productTypeInput.value = product.typeLabel || "";
+  if (productFileInput) {
+    productFileInput.value = "";
+  }
   productImageInput.value = product.imageUrl || "";
   setProductMessage(`Editing ${product.name}.`);
 }
@@ -563,6 +571,7 @@ productForm.addEventListener("submit", async (event) => {
 
   const editingId = productEditingId.value.trim();
   const priceValue = Number(productPriceInput.value);
+  const hasImageFile = Boolean(productFileInput?.files && productFileInput.files.length > 0);
   const payload = {
     name: productNameInput.value.trim(),
     priceCents: Number.isFinite(priceValue) ? Math.round(priceValue * 100) : 0,
@@ -573,6 +582,34 @@ productForm.addEventListener("submit", async (event) => {
 
   try {
     setProductMessage(editingId ? "Saving product..." : "Creating product...");
+
+    if (hasImageFile) {
+      const formData = new FormData();
+      formData.append("name", payload.name);
+      formData.append("priceCents", String(payload.priceCents));
+      formData.append("weightLabel", payload.weightLabel);
+      formData.append("typeLabel", payload.typeLabel);
+      formData.append("imageUrl", payload.imageUrl);
+      formData.append("image", productFileInput.files[0]);
+
+      if (editingId) {
+        await adminApi(`/api/admin/products/${encodeURIComponent(editingId)}`, {
+          method: "PATCH",
+          body: formData
+        });
+        setProductMessage(`Updated ${payload.name}.`);
+      } else {
+        await adminApi("/api/admin/products", {
+          method: "POST",
+          body: formData
+        });
+        setProductMessage(`Created ${payload.name}.`);
+      }
+
+      clearProductForm();
+      await loadAdminData();
+      return;
+    }
 
     if (editingId) {
       await adminApi(`/api/admin/products/${encodeURIComponent(editingId)}`, {
