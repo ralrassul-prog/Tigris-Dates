@@ -279,6 +279,8 @@ function getProductRequestBody(req) {
     typeLabel: String(req.body?.typeLabel || "").trim(),
     priceCents: req.body?.priceCents ?? req.body?.price ?? 0,
     imageUrl: getProductImageUrl(req),
+    description: String(req.body?.description || "").trim(),
+    detailsText: String(req.body?.detailsText || "").trim(),
     badgeLabel: String(req.body?.badgeLabel || "").trim().toLowerCase()
   };
 }

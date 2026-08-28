@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS products (
   type_label TEXT NOT NULL DEFAULT '',
   price_cents INTEGER NOT NULL,
   image_url TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  details_text TEXT NOT NULL DEFAULT '',
   badge_label TEXT NOT NULL DEFAULT '',
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -91,6 +93,8 @@ const hasProductWeightLabel = productColumns.some((col) => col.name === "weight_
 const hasProductTypeLabel = productColumns.some((col) => col.name === "type_label");
 const hasProductPriceCents = productColumns.some((col) => col.name === "price_cents");
 const hasProductImageUrl = productColumns.some((col) => col.name === "image_url");
+const hasProductDescription = productColumns.some((col) => col.name === "description");
+const hasProductDetailsText = productColumns.some((col) => col.name === "details_text");
 const hasProductBadgeLabel = productColumns.some((col) => col.name === "badge_label");
 const hasProductSortOrder = productColumns.some((col) => col.name === "sort_order");
 const hasProductUpdatedAt = productColumns.some((col) => col.name === "updated_at");
@@ -109,6 +113,14 @@ if (!hasProductPriceCents) {
 
 if (!hasProductImageUrl) {
   db.exec("ALTER TABLE products ADD COLUMN image_url TEXT NOT NULL DEFAULT ''");
+}
+
+if (!hasProductDescription) {
+  db.exec("ALTER TABLE products ADD COLUMN description TEXT NOT NULL DEFAULT ''");
+}
+
+if (!hasProductDetailsText) {
+  db.exec("ALTER TABLE products ADD COLUMN details_text TEXT NOT NULL DEFAULT ''");
 }
 
 if (!hasProductBadgeLabel) {
@@ -141,8 +153,8 @@ if (!hasProductUpdatedAt) {
 const existingProductCount = db.prepare("SELECT COUNT(*) AS count FROM products").get().count;
 if (!hadProductsTable && existingProductCount === 0 && Array.isArray(seedProducts) && seedProducts.length > 0) {
   const insertSeedProduct = db.prepare(`
-    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url, badge_label, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url, description, details_text, badge_label, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const seedTransaction = db.transaction(() => {
@@ -154,6 +166,8 @@ if (!hadProductsTable && existingProductCount === 0 && Array.isArray(seedProduct
         product.typeLabel || "",
         product.priceCents,
         product.imageUrl || "",
+        product.description || "",
+        product.detailsText || "",
         product.badgeLabel || "",
         index + 1
       );

@@ -9,6 +9,8 @@ function toProduct(row) {
     typeLabel: row.type_label,
     priceCents: row.price_cents,
     imageUrl: row.image_url || "",
+    description: row.description || "",
+    detailsText: row.details_text || "",
     badgeLabel: row.badge_label || "",
     sortOrder: Number(row.sort_order || 0)
   };
@@ -16,7 +18,7 @@ function toProduct(row) {
 
 function listProducts() {
   const rows = db.prepare(`
-    SELECT id, name, weight_label, type_label, price_cents, image_url, badge_label, sort_order
+    SELECT id, name, weight_label, type_label, price_cents, image_url, description, details_text, badge_label, sort_order
     FROM products
     ORDER BY sort_order ASC, created_at ASC, id ASC
   `).all();
@@ -30,7 +32,7 @@ function getProductById(productId) {
   }
 
   const row = db.prepare(`
-    SELECT id, name, weight_label, type_label, price_cents, image_url, badge_label, sort_order
+    SELECT id, name, weight_label, type_label, price_cents, image_url, description, details_text, badge_label, sort_order
     FROM products
     WHERE id = ?
   `).get(productId);
@@ -52,6 +54,8 @@ function normalizeProductInput(input) {
   const weightLabel = String(input?.weightLabel || "").trim();
   const typeLabel = String(input?.typeLabel || "").trim();
   const imageUrl = String(input?.imageUrl || "").trim();
+  const description = String(input?.description || "").trim();
+  const detailsText = String(input?.detailsText || "").trim();
   const badgeLabel = String(input?.badgeLabel || "").trim().toLowerCase();
   const priceInput = Number(input?.priceCents ?? input?.price ?? 0);
   const priceCents = Number.isFinite(priceInput) ? Math.max(0, Math.round(priceInput)) : 0;
@@ -74,6 +78,8 @@ function normalizeProductInput(input) {
     typeLabel,
     priceCents,
     imageUrl,
+    description,
+    detailsText,
     badgeLabel
   };
 }
@@ -96,8 +102,8 @@ function createProduct(input) {
   const maxSortOrder = db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS value FROM products").get().value;
 
   const result = db.prepare(`
-    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url, badge_label, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url, description, details_text, badge_label, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     productId,
     normalized.name,
@@ -105,6 +111,8 @@ function createProduct(input) {
     normalized.typeLabel,
     normalized.priceCents,
     normalized.imageUrl,
+    normalized.description,
+    normalized.detailsText,
     normalized.badgeLabel,
     Number(maxSortOrder) + 1
   );
@@ -127,16 +135,20 @@ function updateProduct(productId, input) {
     return normalized;
   }
 
+  const nextImageUrl = normalized.imageUrl || existing.imageUrl;
+
   db.prepare(`
     UPDATE products
-    SET name = ?, weight_label = ?, type_label = ?, price_cents = ?, image_url = ?, badge_label = ?, updated_at = CURRENT_TIMESTAMP
+    SET name = ?, weight_label = ?, type_label = ?, price_cents = ?, image_url = ?, description = ?, details_text = ?, badge_label = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(
     normalized.name,
     normalized.weightLabel,
     normalized.typeLabel,
     normalized.priceCents,
-    normalized.imageUrl,
+    nextImageUrl,
+    normalized.description,
+    normalized.detailsText,
     normalized.badgeLabel,
     productId
   );

@@ -16,6 +16,12 @@ const closeSeasonNoticeButton = document.getElementById("closeSeasonNoticeButton
 const orderSummaryDialog = document.getElementById("orderSummaryDialog");
 const orderSummaryText = document.getElementById("orderSummaryText");
 const closeSummaryButton = document.getElementById("closeSummaryButton");
+const productInfoDialog = document.getElementById("productInfoDialog");
+const productInfoTitle = document.getElementById("productInfoTitle");
+const productInfoMeta = document.getElementById("productInfoMeta");
+const productInfoDescription = document.getElementById("productInfoDescription");
+const productInfoList = document.getElementById("productInfoList");
+const closeProductInfoButton = document.getElementById("closeProductInfoButton");
 const orderConfirmDialog = document.getElementById("orderConfirmDialog");
 const orderConfirmText = document.getElementById("orderConfirmText");
 const orderConfirmItems = document.getElementById("orderConfirmItems");
@@ -157,6 +163,58 @@ function updateTotal() {
 function getItemName(productId) {
   const product = state.products.find((entry) => entry.id === productId);
   return product ? product.name : productId;
+}
+
+function parseDetailsLines(detailsText) {
+  return String(detailsText || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function openProductInfoDialog(product) {
+  if (!product) {
+    return;
+  }
+
+  const metaParts = [money(product.priceCents)];
+  if (product.weightLabel) {
+    metaParts.push(product.weightLabel);
+  }
+  if (product.typeLabel) {
+    metaParts.push(product.typeLabel);
+  }
+
+  const detailsLines = parseDetailsLines(product.detailsText);
+  const description = product.description || "Fresh premium dates selected by Tigris Dates.";
+
+  if (
+    productInfoDialog &&
+    typeof productInfoDialog.showModal === "function" &&
+    productInfoTitle &&
+    productInfoMeta &&
+    productInfoDescription &&
+    productInfoList
+  ) {
+    productInfoTitle.textContent = product.name;
+    productInfoMeta.textContent = metaParts.join(" • ");
+    productInfoDescription.textContent = description;
+    productInfoList.innerHTML = "";
+
+    for (const line of detailsLines) {
+      const li = document.createElement("li");
+      li.textContent = line;
+      productInfoList.appendChild(li);
+    }
+
+    if (!productInfoDialog.open) {
+      productInfoDialog.showModal();
+    }
+    return;
+  }
+
+  const fallback = [product.name, metaParts.join(" • "), description, ...detailsLines].join("\n\n");
+  window.alert(fallback);
 }
 
 function openSummaryDialog(text) {
@@ -404,10 +462,18 @@ function renderProducts() {
     qtyShell.appendChild(quantityInput);
     qtyShell.appendChild(incrementButton);
 
+    const detailsButton = document.createElement("button");
+    detailsButton.type = "button";
+    detailsButton.className = "btn ghost btn-details";
+    detailsButton.dataset.action = "details";
+    detailsButton.dataset.productId = product.id;
+    detailsButton.textContent = "View details";
+
     article.appendChild(media);
     article.appendChild(title);
     article.appendChild(meta);
     article.appendChild(qtyShell);
+    article.appendChild(detailsButton);
 
     productGrid.appendChild(article);
   }
@@ -532,9 +598,20 @@ productGrid.addEventListener("click", (event) => {
     return;
   }
 
-  const action = target.dataset.action;
-  const productId = target.dataset.productId;
+  const actionTarget = target.closest("[data-action]");
+  if (!(actionTarget instanceof HTMLElement)) {
+    return;
+  }
+
+  const action = actionTarget.dataset.action;
+  const productId = actionTarget.dataset.productId;
   if (!action || !productId) {
+    return;
+  }
+
+  if (action === "details") {
+    const product = state.products.find((entry) => entry.id === productId);
+    openProductInfoDialog(product);
     return;
   }
 
@@ -592,6 +669,18 @@ closeSummaryButton?.addEventListener("click", () => {
 closeSeasonNoticeButton?.addEventListener("click", () => {
   if (seasonNoticeDialog?.open) {
     seasonNoticeDialog.close();
+  }
+});
+
+closeProductInfoButton?.addEventListener("click", () => {
+  if (productInfoDialog?.open) {
+    productInfoDialog.close();
+  }
+});
+
+productInfoDialog?.addEventListener("click", (event) => {
+  if (event.target === productInfoDialog) {
+    productInfoDialog.close();
   }
 });
 

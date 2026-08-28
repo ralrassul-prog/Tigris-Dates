@@ -1,0 +1,86 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Option 2 product details modal mockup for Tigris Dates">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8e2bd"/>
+      <stop offset="100%" stop-color="#d9a869"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2f2316"/>
+      <stop offset="100%" stop-color="#805225"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#2e1e0f" flood-opacity="0.28"/>
+    </filter>
+    <style>
+      .title { font: 700 42px 'Georgia', serif; fill: #fff6e8; }
+      .subtitle { font: 600 18px 'Arial', sans-serif; fill: #f2dfbf; }
+      .cardTitle { font: 700 34px 'Georgia', serif; fill: #2f261a; }
+      .meta { font: 600 20px 'Arial', sans-serif; fill: #6b5438; }
+      .body { font: 500 19px 'Arial', sans-serif; fill: #3a2f21; }
+      .chip { font: 700 14px 'Arial', sans-serif; fill: #fff; }
+      .btnGhost { font: 700 19px 'Arial', sans-serif; fill: #6a4a23; }
+      .btnPrimary { font: 700 19px 'Arial', sans-serif; fill: #fff; }
+      .caption { font: 600 16px 'Arial', sans-serif; fill: #7d623f; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="800" fill="url(#bg)"/>
+
+  <rect x="90" y="52" rx="24" ry="24" width="1020" height="128" fill="url(#hero)" opacity="0.9"/>
+  <text x="130" y="112" class="title">Tigris Dates</text>
+  <text x="130" y="145" class="subtitle">Organic Medjool Dates • One-page ordering</text>
+
+  <rect x="90" y="210" rx="18" ry="18" width="490" height="500" fill="#fff8eb" opacity="0.82"/>
+  <rect x="620" y="210" rx="18" ry="18" width="490" height="500" fill="#fff8eb" opacity="0.82"/>
+
+  <rect x="120" y="250" rx="12" ry="12" width="430" height="140" fill="#fff" stroke="#e6c18c"/>
+  <text x="140" y="285" class="meta">Chocolate Covered Dates</text>
+  <text x="140" y="317" class="caption">$20.00 • 12 pieces • Chocolate Covered</text>
+  <rect x="140" y="340" rx="18" ry="18" width="110" height="30" fill="#1b7a61"/>
+  <text x="165" y="360" class="chip">Best Seller</text>
+
+  <rect x="120" y="418" rx="12" ry="12" width="430" height="250" fill="#fff" stroke="#e6c18c"/>
+  <text x="140" y="455" class="caption">Quantity controls and form stay visible behind modal</text>
+  <rect x="140" y="490" rx="11" ry="11" width="44" height="44" fill="#fff3df" stroke="#d2a160"/>
+  <text x="157" y="519" class="meta">-</text>
+  <rect x="192" y="490" rx="11" ry="11" width="220" height="44" fill="#fff" stroke="#d2a160"/>
+  <text x="296" y="519" class="meta">0</text>
+  <rect x="420" y="490" rx="11" ry="11" width="44" height="44" fill="#fff3df" stroke="#d2a160"/>
+  <text x="437" y="519" class="meta">+</text>
+  <rect x="140" y="555" rx="10" ry="10" width="150" height="34" fill="#fff" stroke="#d7b487"/>
+  <text x="160" y="578" class="caption">View details</text>
+
+  <rect x="0" y="0" width="1200" height="800" fill="#22170f" opacity="0.45"/>
+
+  <g filter="url(#shadow)">
+    <rect x="290" y="135" rx="22" ry="22" width="620" height="530" fill="#fffaf1" stroke="#e4bb83" stroke-width="2"/>
+  </g>
+
+  <text x="330" y="198" class="cardTitle">Chocolate Covered Dates</text>
+  <text x="330" y="230" class="meta">12 pieces • $20.00</text>
+
+  <rect x="330" y="252" rx="14" ry="14" width="540" height="130" fill="#fff" stroke="#e8c897"/>
+  <text x="352" y="286" class="body">Hand-dipped Medjool dates with a rich dark chocolate shell.</text>
+  <text x="352" y="317" class="body">Soft center, balanced sweetness, and gift-ready presentation.</text>
+  <text x="352" y="348" class="body">Great for snacking, sharing trays, or dessert tables.</text>
+
+  <rect x="330" y="396" rx="14" ry="14" width="260" height="178" fill="#fff" stroke="#e8c897"/>
+  <text x="350" y="430" class="meta">Ingredients</text>
+  <text x="350" y="462" class="body">• Medjool dates</text>
+  <text x="350" y="492" class="body">• Dark chocolate</text>
+  <text x="350" y="522" class="body">• Natural vanilla</text>
+
+  <rect x="610" y="396" rx="14" ry="14" width="260" height="178" fill="#fff" stroke="#e8c897"/>
+  <text x="630" y="430" class="meta">Quick facts</text>
+  <text x="630" y="462" class="body">• No preservatives</text>
+  <text x="630" y="492" class="body">• Keep cool &amp; dry</text>
+  <text x="630" y="522" class="body">• Contains cocoa</text>
+
+  <rect x="330" y="598" rx="14" ry="14" width="150" height="44" fill="#fff" stroke="#d5b48b"/>
+  <text x="380" y="626" text-anchor="middle" class="btnGhost">Close</text>
+
+  <rect x="492" y="598" rx="14" ry="14" width="220" height="44" fill="#bb6413"/>
+  <text x="602" y="626" text-anchor="middle" class="btnPrimary">Add to order</text>
+
+  <text x="332" y="680" class="caption">Option 2 mock: on-page product details modal (keeps one-page flow)</text>
+</svg>
