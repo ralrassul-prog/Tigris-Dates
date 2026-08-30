@@ -7,6 +7,7 @@ const orderForm = document.getElementById("orderForm");
 const orderMessage = document.getElementById("orderMessage");
 const orderTotal = document.getElementById("orderTotal");
 const zelleHint = document.getElementById("zelleHint");
+const ZELLE_DISPLAY = "Zelle (313-445-8089)";
 const whatsappLink = document.getElementById("whatsappLink");
 const deliveryAddressWrap = document.getElementById("deliveryAddressWrap");
 const deliveryAddressInput = document.getElementById("deliveryAddressInput");
@@ -509,7 +510,7 @@ async function submitOrder(event) {
   const paymentLabel = selectedPayment === "card"
     ? "Card"
     : selectedPayment === "zelle"
-      ? "Zelle"
+      ? ZELLE_DISPLAY
       : "Cash";
   const breakdown = computeCheckoutBreakdown(items);
   const totalLabel = money(breakdown.totalCents);
@@ -550,9 +551,9 @@ async function submitOrder(event) {
     orderMessage.style.color = "#0f766e";
 
     if (selectedPayment === "zelle") {
-      orderMessage.textContent = "Your order has been sent. Please pay by Zelle and confirm with the seller. We will process your order as soon as payment is confirmed.";
+      orderMessage.textContent = "Your order has been sent. Please pay by Zelle to 313-445-8089 and confirm with the seller. We will process your order as soon as payment is confirmed.";
 
-      zelleHint.textContent = `Zelle recipient: ${data.zellePayee}`;
+      zelleHint.textContent = `Zelle recipient: 313-445-8089${data.zellePayee ? ` (${data.zellePayee})` : ""}`;
       zelleHint.classList.remove("hidden");
     } else if (selectedPayment === "cash") {
       orderMessage.textContent = "Your order has been sent. Please pay cash when you meet the seller. We will process your order right away and confirm details with you.";
