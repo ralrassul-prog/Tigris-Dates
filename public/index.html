@@ -119,13 +119,23 @@ Total due: $0.00</p>
     </dialog>
 
     <dialog id="productInfoDialog" class="product-info-dialog">
-      <div class="stacked-form">
-        <h3 id="productInfoTitle">Product Details</h3>
-        <p id="productInfoMeta" class="hint"></p>
-        <p id="productInfoDescription" class="hint"></p>
-        <ul id="productInfoList" class="confirm-item-list"></ul>
-        <div class="summary-row">
-          <button id="closeProductInfoButton" class="btn ghost" type="button">Close</button>
+      <div class="product-info-layout">
+        <div class="product-info-media">
+          <img id="productInfoImage" class="product-info-image" alt="" />
+          <div id="productInfoImagePlaceholder" class="product-info-image-placeholder hidden">Image coming soon</div>
+        </div>
+        <div class="product-info-body stacked-form">
+          <button id="closeProductInfoButton" class="product-info-close" type="button" aria-label="Close">&times;</button>
+          <p class="product-info-kicker">Featured Product</p>
+          <h3 id="productInfoTitle" class="product-info-title">Product Details</h3>
+          <p id="productInfoMeta" class="product-info-meta"></p>
+          <p id="productInfoDescription" class="product-info-description"></p>
+          <ul id="productInfoList" class="product-info-list"></ul>
+          <div class="product-info-actions">
+            <button id="addProductInfoButton" class="btn primary" type="button">Add to order</button>
+            <button class="btn ghost" type="button" data-close-product-info="true">Back</button>
+          </div>
+          <p class="product-info-note">Fresh Medjool dates and specialty treats for local ordering.</p>
         </div>
       </div>
     </dialog>

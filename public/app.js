@@ -18,11 +18,14 @@ const orderSummaryDialog = document.getElementById("orderSummaryDialog");
 const orderSummaryText = document.getElementById("orderSummaryText");
 const closeSummaryButton = document.getElementById("closeSummaryButton");
 const productInfoDialog = document.getElementById("productInfoDialog");
+const productInfoImage = document.getElementById("productInfoImage");
+const productInfoImagePlaceholder = document.getElementById("productInfoImagePlaceholder");
 const productInfoTitle = document.getElementById("productInfoTitle");
 const productInfoMeta = document.getElementById("productInfoMeta");
 const productInfoDescription = document.getElementById("productInfoDescription");
 const productInfoList = document.getElementById("productInfoList");
 const closeProductInfoButton = document.getElementById("closeProductInfoButton");
+const addProductInfoButton = document.getElementById("addProductInfoButton");
 const orderConfirmDialog = document.getElementById("orderConfirmDialog");
 const orderConfirmText = document.getElementById("orderConfirmText");
 const orderConfirmItems = document.getElementById("orderConfirmItems");
@@ -34,6 +37,7 @@ const DELIVERY_FEE_CENTS = 500;
 const CARD_FEE_PERCENT = 0.029;
 const CARD_FEE_FIXED_CENTS = 30;
 const CARD_FEE_MODE = "gross_up";
+let activeProductInfoId = "";
 
 function money(cents) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -173,6 +177,81 @@ function parseDetailsLines(detailsText) {
     .filter(Boolean);
 }
 
+function buildProductSummary(product) {
+  if (product.description) {
+    return product.description;
+  }
+
+  if (product.typeLabel === "Chocolate Covered") {
+    return "Gift-ready dates finished with a richer dessert-style presentation.";
+  }
+
+  if (/honey/i.test(product.name) || /honey/i.test(product.typeLabel || "")) {
+    return "A premium pantry staple that pairs naturally with dates and gifting bundles.";
+  }
+
+  if ((product.typeLabel || "").toLowerCase() === "jumbo") {
+    return "Soft, large dates with a premium look for everyday snacking and family tables.";
+  }
+
+  if ((product.typeLabel || "").toLowerCase() === "mix") {
+    return "A balanced Medjool box with approachable sizing and everyday value.";
+  }
+
+  return "Fresh premium dates selected by Tigris Dates.";
+}
+
+function buildProductDetails(product) {
+  const savedLines = parseDetailsLines(product.detailsText);
+  if (savedLines.length) {
+    return savedLines;
+  }
+
+  if (product.typeLabel === "Chocolate Covered") {
+    return [
+      "Gift-ready presentation",
+      "Rich dessert finish",
+      "Great for sharing and gatherings"
+    ];
+  }
+
+  if (/honey/i.test(product.name) || /honey/i.test(product.typeLabel || "")) {
+    return [
+      "Pure pantry staple",
+      "Pairs well with dates",
+      "Easy add-on for gift bundles"
+    ];
+  }
+
+  if ((product.typeLabel || "").toLowerCase() === "jumbo") {
+    return [
+      "Large fruit",
+      "Great for snacking",
+      "Popular home size"
+    ];
+  }
+
+  if ((product.typeLabel || "").toLowerCase() === "mix") {
+    return [
+      "Balanced assortment",
+      "Good everyday value",
+      "Easy starter box"
+    ];
+  }
+
+  return [
+    "Fresh packed product",
+    "Naturally sweet",
+    "Local order friendly"
+  ];
+}
+
+function closeProductInfoDialog() {
+  if (productInfoDialog?.open) {
+    productInfoDialog.close();
+  }
+}
+
 function openProductInfoDialog(product) {
   if (!product) {
     return;
@@ -186,12 +265,15 @@ function openProductInfoDialog(product) {
     metaParts.push(product.typeLabel);
   }
 
-  const detailsLines = parseDetailsLines(product.detailsText);
-  const description = product.description || "Fresh premium dates selected by Tigris Dates.";
+  const detailsLines = buildProductDetails(product);
+  const description = buildProductSummary(product);
+  activeProductInfoId = product.id;
 
   if (
     productInfoDialog &&
     typeof productInfoDialog.showModal === "function" &&
+    productInfoImage &&
+    productInfoImagePlaceholder &&
     productInfoTitle &&
     productInfoMeta &&
     productInfoDescription &&
@@ -201,6 +283,18 @@ function openProductInfoDialog(product) {
     productInfoMeta.textContent = metaParts.join(" • ");
     productInfoDescription.textContent = description;
     productInfoList.innerHTML = "";
+
+    if (product.imageUrl) {
+      productInfoImage.src = product.imageUrl;
+      productInfoImage.alt = product.name;
+      productInfoImage.classList.remove("hidden");
+      productInfoImagePlaceholder.classList.add("hidden");
+    } else {
+      productInfoImage.removeAttribute("src");
+      productInfoImage.alt = "";
+      productInfoImage.classList.add("hidden");
+      productInfoImagePlaceholder.classList.remove("hidden");
+    }
 
     for (const line of detailsLines) {
       const li = document.createElement("li");
@@ -419,18 +513,27 @@ function renderProducts() {
     }
 
     const title = document.createElement("h4");
+    title.className = "product-title";
     title.textContent = product.name;
 
     const meta = document.createElement("p");
     meta.className = "product-meta";
-    const parts = [money(product.priceCents)];
+    const parts = [];
     if (product.weightLabel) {
       parts.push(product.weightLabel);
     }
     if (product.typeLabel) {
       parts.push(product.typeLabel);
     }
-    meta.textContent = parts.join(" • ");
+    meta.textContent = parts.join(" • ") || "Featured Product";
+
+    const description = document.createElement("p");
+    description.className = "product-description";
+    description.textContent = buildProductSummary(product);
+
+    const price = document.createElement("p");
+    price.className = "product-price";
+    price.textContent = money(product.priceCents);
 
     const qtyShell = document.createElement("div");
     qtyShell.className = "qty-shell";
@@ -471,8 +574,10 @@ function renderProducts() {
     detailsButton.textContent = "View details";
 
     article.appendChild(media);
-    article.appendChild(title);
     article.appendChild(meta);
+    article.appendChild(title);
+    article.appendChild(description);
+    article.appendChild(price);
     article.appendChild(qtyShell);
     article.appendChild(detailsButton);
 
@@ -673,15 +778,31 @@ closeSeasonNoticeButton?.addEventListener("click", () => {
   }
 });
 
-closeProductInfoButton?.addEventListener("click", () => {
-  if (productInfoDialog?.open) {
-    productInfoDialog.close();
+closeProductInfoButton?.addEventListener("click", closeProductInfoDialog);
+
+addProductInfoButton?.addEventListener("click", () => {
+  if (!activeProductInfoId) {
+    return;
+  }
+
+  setQuantity(activeProductInfoId, getQuantity(activeProductInfoId) + 1);
+  closeProductInfoDialog();
+});
+
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  if (target.dataset.closeProductInfo === "true") {
+    closeProductInfoDialog();
   }
 });
 
 productInfoDialog?.addEventListener("click", (event) => {
   if (event.target === productInfoDialog) {
-    productInfoDialog.close();
+    closeProductInfoDialog();
   }
 });
 
