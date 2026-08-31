@@ -527,10 +527,6 @@ function renderProducts() {
     }
     meta.textContent = parts.join(" • ") || "Featured Product";
 
-    const description = document.createElement("p");
-    description.className = "product-description";
-    description.textContent = buildProductSummary(product);
-
     const price = document.createElement("p");
     price.className = "product-price";
     price.textContent = money(product.priceCents);
@@ -576,7 +572,6 @@ function renderProducts() {
     article.appendChild(media);
     article.appendChild(meta);
     article.appendChild(title);
-    article.appendChild(description);
     article.appendChild(price);
     article.appendChild(qtyShell);
     article.appendChild(detailsButton);

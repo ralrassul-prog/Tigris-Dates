@@ -402,16 +402,8 @@ textarea:focus {
   text-transform: uppercase;
 }
 
-.product-description {
-  margin: 0.55rem 0 0;
-  color: #6d553c;
-  font-size: 0.95rem;
-  line-height: 1.45;
-  min-height: 2.7rem;
-}
-
 .product-price {
-  margin: 0.85rem 0 0;
+  margin: 0.6rem 0 0;
   font-size: 1.72rem;
   font-weight: 800;
   color: #9d560d;
