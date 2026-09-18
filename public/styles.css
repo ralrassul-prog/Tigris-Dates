@@ -724,12 +724,18 @@ select {
   border: 1px solid var(--line);
   border-radius: 28px;
   padding: 0;
-  width: min(860px, calc(100vw - 1.4rem));
-  max-width: calc(100vw - 1rem);
+  width: min(860px, calc(100vw - 1.2rem));
+  max-width: min(860px, calc(100vw - 1.2rem));
+  max-height: calc(100vh - 1.2rem);
   background: #fff7ea;
   color: var(--ink);
-  overflow: hidden;
+  overflow: auto;
   margin: auto;
+  box-sizing: border-box;
+}
+
+.dialog-content-shell {
+  max-width: 100%;
   box-sizing: border-box;
 }
 
@@ -928,6 +934,15 @@ select {
 
   .product-title {
     font-size: 1.45rem;
+  }
+
+  .order-confirm-dialog,
+  .order-summary-dialog,
+  .product-info-dialog {
+    width: min(100vw - 0.8rem, 860px);
+    max-width: min(100vw - 0.8rem, 860px);
+    max-height: calc(100vh - 0.8rem);
+    border-radius: 20px;
   }
 
   .product-info-layout {
