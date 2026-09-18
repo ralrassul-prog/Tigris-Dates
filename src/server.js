@@ -289,6 +289,18 @@ function formatUsd(cents) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function getExpenses() {
+  return db.prepare(`
+    SELECT id, name, amount_cents, created_at
+    FROM expenses
+    ORDER BY created_at DESC, id DESC
+  `).all();
+}
+
+function getTotalExpensesCents() {
+  return Number(db.prepare("SELECT COALESCE(SUM(amount_cents), 0) AS sum_cents FROM expenses").get().sum_cents || 0);
+}
+
 function buildOrderSummaryText(items, totalCents, customerName, options = {}) {
   const deliveryFeeCents = Number(options.deliveryFeeCents || 0);
   const paymentMethod = String(options.paymentMethod || "").trim();
@@ -1098,6 +1110,9 @@ app.get("/api/admin/summary", requireAdmin, (_req, res) => {
     "SELECT COALESCE(SUM(total_cents), 0) AS sum_cents FROM orders WHERE payment_method = 'cash' AND status IN ('awaiting_cash')"
   ).get().sum_cents;
 
+  const totalExpensesCents = getTotalExpensesCents();
+  const netRevenuePaidCents = revenuePaidCents - totalExpensesCents;
+
   return res.json({
     summary: {
       totalOrders,
@@ -1107,27 +1122,72 @@ app.get("/api/admin/summary", requireAdmin, (_req, res) => {
       completed,
       cancelled,
       newOrders,
-      revenuePaid: formatUsd(revenuePaidCents),
+      expensesTotal: formatUsd(totalExpensesCents),
+      revenuePaid: formatUsd(netRevenuePaidCents),
       revenueUnpaid: formatUsd(revenueUnpaidCents),
       paidByZelle: formatUsd(paidByZelleCents),
       paidByCard: formatUsd(paidByCardCents),
       paidByCash: formatUsd(paidByCashCents),
       awaitingByZelle: formatUsd(awaitingByZelleCents),
       awaitingByCard: formatUsd(awaitingByCardCents),
-      awaitingByCash: formatUsd(awaitingByCashCents)
+      awaitingByCash: formatUsd(awaitingByCashCents),
+      netRevenuePaid: formatUsd(netRevenuePaidCents)
     },
     profit: {
       weekly: formatUsd(db.prepare(
         "SELECT COALESCE(SUM(total_cents - card_fee_cents), 0) AS sum_cents FROM orders WHERE status IN ('paid', 'ready_for_pickup', 'completed') AND date(created_at) >= date('now', '-7 days')"
-      ).get().sum_cents),
+      ).get().sum_cents - totalExpensesCents),
       monthly: formatUsd(db.prepare(
         "SELECT COALESCE(SUM(total_cents - card_fee_cents), 0) AS sum_cents FROM orders WHERE status IN ('paid', 'ready_for_pickup', 'completed') AND date(created_at) >= date('now', 'start of month')"
-      ).get().sum_cents),
+      ).get().sum_cents - totalExpensesCents),
       season: formatUsd(db.prepare(
         "SELECT COALESCE(SUM(total_cents - card_fee_cents), 0) AS sum_cents FROM orders WHERE status IN ('paid', 'ready_for_pickup', 'completed')"
-      ).get().sum_cents)
+      ).get().sum_cents - totalExpensesCents)
     }
   });
+});
+
+app.get("/api/admin/expenses", requireAdmin, (_req, res) => {
+  return res.json({ expenses: getExpenses() });
+});
+
+app.post("/api/admin/expenses", requireAdmin, (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const amountCents = Number(req.body?.amountCents ?? req.body?.amount ?? 0);
+
+  if (!name) {
+    return res.status(400).json({ error: "Expense name is required." });
+  }
+
+  if (!Number.isFinite(amountCents) || amountCents <= 0) {
+    return res.status(400).json({ error: "Expense amount must be greater than zero." });
+  }
+
+  const result = db.prepare(
+    "INSERT INTO expenses (name, amount_cents) VALUES (?, ?)"
+  ).run(name, Math.round(amountCents));
+
+  const expense = db.prepare("SELECT id, name, amount_cents, created_at FROM expenses WHERE id = ?").get(result.lastInsertRowid);
+
+  return res.status(201).json({
+    message: "Expense recorded.",
+    expense
+  });
+});
+
+app.delete("/api/admin/expenses/:expenseId", requireAdmin, (req, res) => {
+  const expenseId = Number(req.params.expenseId);
+  if (!Number.isInteger(expenseId) || expenseId < 1) {
+    return res.status(400).json({ error: "Invalid expense id." });
+  }
+
+  const existing = db.prepare("SELECT id FROM expenses WHERE id = ?").get(expenseId);
+  if (!existing) {
+    return res.status(404).json({ error: "Expense not found." });
+  }
+
+  db.prepare("DELETE FROM expenses WHERE id = ?").run(expenseId);
+  return res.json({ message: "Expense deleted." });
 });
 
 app.post("/api/admin/reset", requireAdmin, (_req, res) => {
@@ -1141,13 +1201,14 @@ app.post("/api/admin/reset", requireAdmin, (_req, res) => {
   const reset = db.transaction(() => {
     db.prepare("DELETE FROM order_items").run();
     db.prepare("DELETE FROM card_checkout_drafts").run();
+    db.prepare("DELETE FROM expenses").run();
     db.prepare("DELETE FROM orders").run();
-    db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('orders', 'order_items', 'card_checkout_drafts')").run();
+    db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('orders', 'order_items', 'card_checkout_drafts', 'expenses')").run();
   });
 
   reset();
 
-  return res.json({ message: "All orders and admin counts have been reset." });
+  return res.json({ message: "All orders, expenses, and admin counts have been reset." });
 });
 
 app.post("/api/orders", async (req, res) => {

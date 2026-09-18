@@ -11,9 +11,6 @@ const ZELLE_DISPLAY = "Zelle (313-445-8089)";
 const whatsappLink = document.getElementById("whatsappLink");
 const deliveryAddressWrap = document.getElementById("deliveryAddressWrap");
 const deliveryAddressInput = document.getElementById("deliveryAddressInput");
-const seasonNoticeDialog = document.getElementById("seasonNoticeDialog");
-const seasonNoticeText = document.getElementById("seasonNoticeText");
-const closeSeasonNoticeButton = document.getElementById("closeSeasonNoticeButton");
 const orderSummaryDialog = document.getElementById("orderSummaryDialog");
 const orderSummaryText = document.getElementById("orderSummaryText");
 const closeSummaryButton = document.getElementById("closeSummaryButton");
@@ -326,19 +323,6 @@ function openSummaryDialog(text) {
   }
 
   window.alert(text);
-}
-
-function openSeasonNotice() {
-  if (seasonNoticeDialog && typeof seasonNoticeDialog.showModal === "function") {
-    if (!seasonNoticeDialog.open) {
-      seasonNoticeDialog.showModal();
-    }
-    return;
-  }
-
-  if (seasonNoticeText) {
-    window.alert(seasonNoticeText.textContent || "Dates are not in season yet.");
-  }
 }
 
 function buildSummaryText({ items, paymentLabel, fulfillmentMethod, address, totalText }) {
@@ -767,12 +751,6 @@ closeSummaryButton?.addEventListener("click", () => {
   }
 });
 
-closeSeasonNoticeButton?.addEventListener("click", () => {
-  if (seasonNoticeDialog?.open) {
-    seasonNoticeDialog.close();
-  }
-});
-
 closeProductInfoButton?.addEventListener("click", closeProductInfoDialog);
 
 addProductInfoButton?.addEventListener("click", () => {
@@ -801,19 +779,11 @@ productInfoDialog?.addEventListener("click", (event) => {
   }
 });
 
-seasonNoticeDialog?.addEventListener("click", (event) => {
-  if (event.target === seasonNoticeDialog) {
-    seasonNoticeDialog.close();
-  }
-});
-
 orderForm.addEventListener("submit", submitOrder);
 
 loadProducts().catch((error) => {
   orderMessage.textContent = error.message;
 });
-
-openSeasonNotice();
 
 const currentUrl = new URL(window.location.href);
 const checkoutStatus = currentUrl.searchParams.get("checkout");

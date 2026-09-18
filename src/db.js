@@ -86,7 +86,31 @@ CREATE TABLE IF NOT EXISTS products (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `);
+
+const paymentColumns = db.prepare("PRAGMA table_info(expenses)").all();
+const hasExpenseName = paymentColumns.some((col) => col.name === "name");
+const hasExpenseAmountCents = paymentColumns.some((col) => col.name === "amount_cents");
+const hasExpenseCreatedAt = paymentColumns.some((col) => col.name === "created_at");
+
+if (!hasExpenseName || !hasExpenseAmountCents || !hasExpenseCreatedAt) {
+  if (!hasExpenseName) {
+    db.exec("ALTER TABLE expenses ADD COLUMN name TEXT NOT NULL DEFAULT ''");
+  }
+  if (!hasExpenseAmountCents) {
+    db.exec("ALTER TABLE expenses ADD COLUMN amount_cents INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!hasExpenseCreatedAt) {
+    db.exec("ALTER TABLE expenses ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  }
+}
 
 const productColumns = db.prepare("PRAGMA table_info(products)").all();
 const hasProductWeightLabel = productColumns.some((col) => col.name === "weight_label");

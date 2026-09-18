@@ -97,6 +97,15 @@ body {
   box-shadow: 0 22px 42px rgba(16, 10, 5, 0.4);
 }
 
+.top-bar-phone {
+  margin: 0 0 0.4rem;
+  text-align: right;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff0d4;
+}
+
 .compact-hero {
   display: grid;
   gap: 0.18rem;
@@ -675,15 +684,17 @@ select {
 
 .order-confirm-dialog,
 .order-summary-dialog,
-.season-notice-dialog,
 .product-info-dialog {
   border: 1px solid var(--line);
   border-radius: 28px;
   padding: 0;
   width: min(860px, calc(100vw - 1.4rem));
+  max-width: calc(100vw - 1rem);
   background: #fff7ea;
   color: var(--ink);
   overflow: hidden;
+  margin: auto;
+  box-sizing: border-box;
 }
 
 .customer-page .hero.card {
@@ -696,7 +707,6 @@ select {
 
 .order-confirm-dialog::backdrop,
 .order-summary-dialog::backdrop,
-.season-notice-dialog::backdrop,
 .product-info-dialog::backdrop {
   background: rgba(25, 21, 14, 0.4);
 }

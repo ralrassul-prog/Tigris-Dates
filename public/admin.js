@@ -23,6 +23,7 @@ const productList = document.getElementById("productList");
 const resetAccountingButton = document.getElementById("resetAccountingButton");
 const paidTotal = document.getElementById("paidTotal");
 const unpaidTotal = document.getElementById("unpaidTotal");
+const expensesTotal = document.getElementById("expensesTotal");
 const paidByZelle = document.getElementById("paidByZelle");
 const paidByCard = document.getElementById("paidByCard");
 const paidByCash = document.getElementById("paidByCash");
@@ -30,6 +31,11 @@ const awaitingByZelle = document.getElementById("awaitingByZelle");
 const awaitingByCard = document.getElementById("awaitingByCard");
 const awaitingByCash = document.getElementById("awaitingByCash");
 const newOrdersCount = document.getElementById("newOrdersCount");
+const expenseForm = document.getElementById("expenseForm");
+const expenseNameInput = document.getElementById("expenseNameInput");
+const expenseAmountInput = document.getElementById("expenseAmountInput");
+const expenseMessage = document.getElementById("expenseMessage");
+const expenseList = document.getElementById("expenseList");
 
 let isAuthenticated = false;
 let currentTab = "active";
@@ -68,7 +74,8 @@ function formatProductPrice(cents) {
 }
 
 function renderSummary(summary) {
-  paidTotal.textContent = summary.revenuePaid;
+  paidTotal.textContent = summary.revenuePaid || summary.netRevenuePaid || "$0.00";
+  expensesTotal.textContent = summary.expensesTotal || "$0.00";
   unpaidTotal.textContent = summary.revenueUnpaid;
   paidByZelle.textContent = summary.paidByZelle;
   paidByCard.textContent = summary.paidByCard;
@@ -82,7 +89,8 @@ function renderSummary(summary) {
     `Total orders: ${summary.totalOrders}`,
     `Awaiting payment: ${summary.awaitingPayment}`,
     `Completed: ${summary.completed}`,
-    `Cancelled: ${summary.cancelled}`
+    `Cancelled: ${summary.cancelled}`,
+    `Expenses: ${summary.expensesTotal || "$0.00"}`
   ].join(" | ");
 }
 
@@ -508,6 +516,69 @@ function renderProducts() {
   }
 }
 
+function setExpenseMessage(text, isError = false) {
+  expenseMessage.style.color = isError ? "#a61b1b" : "#0f766e";
+  expenseMessage.textContent = text;
+}
+
+function renderExpenses(expenses) {
+  expenseList.innerHTML = "";
+
+  if (!Array.isArray(expenses) || !expenses.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "No expenses recorded yet.";
+    expenseList.appendChild(empty);
+    return;
+  }
+
+  for (const expense of expenses) {
+    const row = document.createElement("div");
+    row.className = "summary-row";
+    row.style.border = "1px solid #e8c98d";
+    row.style.borderRadius = "12px";
+    row.style.padding = "0.6rem 0.7rem";
+    row.style.background = "#fff";
+
+    const info = document.createElement("div");
+    info.className = "stacked-form";
+    info.style.gap = "0.15rem";
+
+    const title = document.createElement("strong");
+    title.textContent = expense.name;
+
+    const meta = document.createElement("span");
+    meta.className = "hint";
+    meta.textContent = new Date(expense.created_at).toLocaleString();
+
+    info.appendChild(title);
+    info.appendChild(meta);
+
+    const amount = document.createElement("strong");
+    amount.textContent = `$${((Number(expense.amount_cents || 0) / 100)).toFixed(2)}`;
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "btn ghost";
+    removeButton.textContent = "Delete";
+    removeButton.addEventListener("click", async () => {
+      try {
+        setExpenseMessage(`Deleting ${expense.name}...`);
+        await adminApi(`/api/admin/expenses/${expense.id}`, { method: "DELETE" });
+        setExpenseMessage(`Deleted ${expense.name}.`);
+        await loadAdminData();
+      } catch (error) {
+        setExpenseMessage(error.message, true);
+      }
+    });
+
+    row.appendChild(info);
+    row.appendChild(amount);
+    row.appendChild(removeButton);
+    expenseList.appendChild(row);
+  }
+}
+
 function getVisibleOrders() {
   if (currentTab === "completed") {
     return allOrders.filter((order) => isClosedStatus(order.status));
@@ -659,10 +730,11 @@ function setTab(nextTab) {
 }
 
 async function loadAdminData() {
-  const [summaryData, ordersData, productsData] = await Promise.all([
+  const [summaryData, ordersData, productsData, expensesData] = await Promise.all([
     adminApi("/api/admin/summary", { method: "GET" }),
     adminApi("/api/admin/orders?limit=200", { method: "GET" }),
-    adminApi("/api/admin/products", { method: "GET" })
+    adminApi("/api/admin/products", { method: "GET" }),
+    adminApi("/api/admin/expenses", { method: "GET" })
   ]);
 
   allOrders = ordersData.orders || [];
@@ -670,6 +742,7 @@ async function loadAdminData() {
   renderSummary(summaryData.summary);
   renderProducts();
   renderOrders();
+  renderExpenses(expensesData.expenses || []);
 }
 
 async function checkAdminSession() {
@@ -743,6 +816,32 @@ logoutButton.addEventListener("click", async () => {
   } catch (error) {
     adminMessage.style.color = "#a61b1b";
     adminMessage.textContent = error.message;
+  }
+});
+
+expenseForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const name = expenseNameInput.value.trim();
+  const amount = Number(expenseAmountInput.value);
+
+  if (!name || !Number.isFinite(amount) || amount <= 0) {
+    setExpenseMessage("Enter a valid expense name and amount.", true);
+    return;
+  }
+
+  try {
+    setExpenseMessage("Adding expense...");
+    await adminApi("/api/admin/expenses", {
+      method: "POST",
+      body: JSON.stringify({ name, amountCents: Math.round(amount * 100) })
+    });
+
+    expenseForm.reset();
+    setExpenseMessage("Expense added.");
+    await loadAdminData();
+  } catch (error) {
+    setExpenseMessage(error.message, true);
   }
 });
 
