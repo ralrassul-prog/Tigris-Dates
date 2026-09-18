@@ -281,7 +281,8 @@ function getProductRequestBody(req) {
     imageUrl: getProductImageUrl(req),
     description: String(req.body?.description || "").trim(),
     detailsText: String(req.body?.detailsText || "").trim(),
-    badgeLabel: String(req.body?.badgeLabel || "").trim().toLowerCase()
+    badgeLabel: String(req.body?.badgeLabel || "").trim().toLowerCase(),
+    isOutOfStock: req.body?.isOutOfStock ?? req.body?.is_out_of_stock ?? false
   };
 }
 

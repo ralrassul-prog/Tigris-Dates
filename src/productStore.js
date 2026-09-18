@@ -12,13 +12,14 @@ function toProduct(row) {
     description: row.description || "",
     detailsText: row.details_text || "",
     badgeLabel: row.badge_label || "",
+    isOutOfStock: Boolean(row.is_out_of_stock),
     sortOrder: Number(row.sort_order || 0)
   };
 }
 
 function listProducts() {
   const rows = db.prepare(`
-    SELECT id, name, weight_label, type_label, price_cents, image_url, description, details_text, badge_label, sort_order
+    SELECT id, name, weight_label, type_label, price_cents, image_url, description, details_text, badge_label, is_out_of_stock, sort_order
     FROM products
     ORDER BY sort_order ASC, created_at ASC, id ASC
   `).all();
@@ -32,7 +33,7 @@ function getProductById(productId) {
   }
 
   const row = db.prepare(`
-    SELECT id, name, weight_label, type_label, price_cents, image_url, description, details_text, badge_label, sort_order
+    SELECT id, name, weight_label, type_label, price_cents, image_url, description, details_text, badge_label, is_out_of_stock, sort_order
     FROM products
     WHERE id = ?
   `).get(productId);
@@ -57,6 +58,8 @@ function normalizeProductInput(input) {
   const description = String(input?.description || "").trim();
   const detailsText = String(input?.detailsText || "").trim();
   const badgeLabel = String(input?.badgeLabel || "").trim().toLowerCase();
+  const isOutOfStockValue = input?.isOutOfStock ?? input?.is_out_of_stock ?? false;
+  const isOutOfStock = isOutOfStockValue === true || String(isOutOfStockValue).trim().toLowerCase() === "true";
   const priceInput = Number(input?.priceCents ?? input?.price ?? 0);
   const priceCents = Number.isFinite(priceInput) ? Math.max(0, Math.round(priceInput)) : 0;
 
@@ -80,7 +83,8 @@ function normalizeProductInput(input) {
     imageUrl,
     description,
     detailsText,
-    badgeLabel
+    badgeLabel,
+    isOutOfStock
   };
 }
 
@@ -102,8 +106,8 @@ function createProduct(input) {
   const maxSortOrder = db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS value FROM products").get().value;
 
   const result = db.prepare(`
-    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url, description, details_text, badge_label, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO products (id, name, weight_label, type_label, price_cents, image_url, description, details_text, badge_label, is_out_of_stock, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     productId,
     normalized.name,
@@ -114,6 +118,7 @@ function createProduct(input) {
     normalized.description,
     normalized.detailsText,
     normalized.badgeLabel,
+    Number(normalized.isOutOfStock) ? 1 : 0,
     Number(maxSortOrder) + 1
   );
 
@@ -139,7 +144,7 @@ function updateProduct(productId, input) {
 
   db.prepare(`
     UPDATE products
-    SET name = ?, weight_label = ?, type_label = ?, price_cents = ?, image_url = ?, description = ?, details_text = ?, badge_label = ?, updated_at = CURRENT_TIMESTAMP
+    SET name = ?, weight_label = ?, type_label = ?, price_cents = ?, image_url = ?, description = ?, details_text = ?, badge_label = ?, is_out_of_stock = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(
     normalized.name,
@@ -150,6 +155,7 @@ function updateProduct(productId, input) {
     normalized.description,
     normalized.detailsText,
     normalized.badgeLabel,
+    Number(normalized.isOutOfStock) ? 1 : 0,
     productId
   );
 

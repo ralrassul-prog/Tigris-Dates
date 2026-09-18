@@ -263,6 +263,9 @@ function openProductInfoDialog(product) {
   }
 
   const detailsLines = buildProductDetails(product);
+  if (product.isOutOfStock) {
+    detailsLines.unshift("Currently unavailable — this item is out of stock.");
+  }
   const description = buildProductSummary(product);
   activeProductInfoId = product.id;
 
@@ -297,6 +300,12 @@ function openProductInfoDialog(product) {
       const li = document.createElement("li");
       li.textContent = line;
       productInfoList.appendChild(li);
+    }
+
+    const addButton = document.getElementById("addProductInfoButton");
+    if (addButton) {
+      addButton.disabled = Boolean(product.isOutOfStock);
+      addButton.textContent = product.isOutOfStock ? "Out of stock" : "Add to order";
     }
 
     if (!productInfoDialog.open) {
@@ -465,9 +474,14 @@ function renderProducts() {
 
   for (const product of state.products) {
     const article = document.createElement("article");
-    article.className = "product-item";
+    article.className = `product-item${product.isOutOfStock ? " product-item-out" : ""}`;
 
-    if (product.badgeLabel === "best_seller") {
+    if (product.isOutOfStock) {
+      const badge = document.createElement("p");
+      badge.className = "product-badge product-badge-out";
+      badge.textContent = "Out of Stock";
+      article.appendChild(badge);
+    } else if (product.badgeLabel === "best_seller") {
       const badge = document.createElement("p");
       badge.className = "product-badge";
       badge.textContent = "Best Seller";
@@ -532,6 +546,7 @@ function renderProducts() {
     quantityInput.type = "text";
     quantityInput.inputMode = "numeric";
     quantityInput.value = "0";
+    quantityInput.disabled = product.isOutOfStock;
     quantityInput.setAttribute("aria-label", `Quantity for ${product.name}`);
 
     const incrementButton = document.createElement("button");
@@ -539,8 +554,11 @@ function renderProducts() {
     incrementButton.className = "qty-btn";
     incrementButton.dataset.action = "increment";
     incrementButton.dataset.productId = product.id;
+    incrementButton.disabled = product.isOutOfStock;
     incrementButton.setAttribute("aria-label", `Increase ${product.name}`);
     incrementButton.textContent = "+";
+
+    decrementButton.disabled = product.isOutOfStock;
 
     qtyShell.appendChild(decrementButton);
     qtyShell.appendChild(quantityInput);
@@ -551,12 +569,17 @@ function renderProducts() {
     detailsButton.className = "btn ghost btn-details";
     detailsButton.dataset.action = "details";
     detailsButton.dataset.productId = product.id;
-    detailsButton.textContent = "View details";
+    detailsButton.textContent = product.isOutOfStock ? "View details" : "View details";
+
+    const stockNote = document.createElement("p");
+    stockNote.className = "stock-note";
+    stockNote.textContent = product.isOutOfStock ? "This item is temporarily out of stock." : "Available now";
 
     article.appendChild(media);
     article.appendChild(meta);
     article.appendChild(title);
     article.appendChild(price);
+    article.appendChild(stockNote);
     article.appendChild(qtyShell);
     article.appendChild(detailsButton);
 
@@ -700,6 +723,11 @@ productGrid.addEventListener("click", (event) => {
     return;
   }
 
+  const product = state.products.find((entry) => entry.id === productId);
+  if (product?.isOutOfStock) {
+    return;
+  }
+
   const current = getQuantity(productId);
   if (action === "increment") {
     setQuantity(productId, current + 1);
@@ -713,6 +741,12 @@ productGrid.addEventListener("click", (event) => {
 productGrid.addEventListener("input", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement) || !target.id.startsWith("qty-")) {
+    return;
+  }
+
+  const product = state.products.find((entry) => entry.id === target.id.replace("qty-", ""));
+  if (product?.isOutOfStock) {
+    target.value = "0";
     return;
   }
 
@@ -755,6 +789,11 @@ closeProductInfoButton?.addEventListener("click", closeProductInfoDialog);
 
 addProductInfoButton?.addEventListener("click", () => {
   if (!activeProductInfoId) {
+    return;
+  }
+
+  const product = state.products.find((entry) => entry.id === activeProductInfoId);
+  if (product?.isOutOfStock) {
     return;
   }
 

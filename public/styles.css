@@ -345,6 +345,21 @@ textarea:focus {
   background: linear-gradient(135deg, #a55810, #7d3c03);
 }
 
+.product-badge-out {
+  background: linear-gradient(135deg, #7d4d4d, #5c3030);
+}
+
+.product-item-out {
+  opacity: 0.8;
+  border-color: rgba(128, 84, 84, 0.8);
+}
+
+.product-item-out .qty-btn,
+.product-item-out .qty-input {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
 .customer-page .product-item:hover {
   transform: translateY(-2px);
   box-shadow: 0 12px 24px rgba(55, 33, 8, 0.16);
@@ -426,11 +441,32 @@ textarea:focus {
   min-height: 126px;
 }
 
+.stock-note {
+  margin: 0.3rem 0 0;
+  color: #8f4d4d;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .btn-details {
   margin-top: 0.55rem;
   width: 100%;
   font-size: 0.92rem;
   padding: 0.68rem 0.9rem;
+}
+
+.checkbox-row {
+  display: flex !important;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.checkbox-row input {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--brand-dark);
 }
 
 .qty-shell {

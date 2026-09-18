@@ -18,6 +18,7 @@ const productFileInput = document.getElementById("productFileInput");
 const productDescriptionInput = document.getElementById("productDescriptionInput");
 const productDetailsInput = document.getElementById("productDetailsInput");
 const productBadgeInput = document.getElementById("productBadgeInput");
+const productOutOfStockInput = document.getElementById("productOutOfStockInput");
 const productMessage = document.getElementById("productMessage");
 const productList = document.getElementById("productList");
 const resetAccountingButton = document.getElementById("resetAccountingButton");
@@ -322,6 +323,9 @@ function clearProductForm() {
   if (productBadgeInput) {
     productBadgeInput.value = "";
   }
+  if (productOutOfStockInput) {
+    productOutOfStockInput.checked = false;
+  }
   setProductMessage("");
 }
 
@@ -342,6 +346,9 @@ function populateProductForm(product) {
   }
   if (productBadgeInput) {
     productBadgeInput.value = product.badgeLabel || "";
+  }
+  if (productOutOfStockInput) {
+    productOutOfStockInput.checked = Boolean(product.isOutOfStock);
   }
   setProductMessage(`Editing ${product.name}.`);
 }
@@ -434,11 +441,16 @@ function renderProductCard(product) {
     ? `Summary: ${product.description}`
     : "Summary: None";
 
+  const stock = document.createElement("p");
+  stock.className = "hint";
+  stock.textContent = product.isOutOfStock ? "Stock: Out of stock" : "Stock: Available";
+
   info.appendChild(title);
   info.appendChild(meta);
   info.appendChild(price);
   info.appendChild(position);
   info.appendChild(badge);
+  info.appendChild(stock);
   info.appendChild(description);
 
   main.appendChild(imageWrap);
@@ -858,7 +870,8 @@ productForm.addEventListener("submit", async (event) => {
     typeLabel: productTypeInput.value.trim(),
     description: productDescriptionInput?.value.trim() || "",
     detailsText: productDetailsInput?.value.trim() || "",
-    badgeLabel: productBadgeInput?.value || ""
+    badgeLabel: productBadgeInput?.value || "",
+    isOutOfStock: Boolean(productOutOfStockInput?.checked)
   };
 
   try {
@@ -873,6 +886,7 @@ productForm.addEventListener("submit", async (event) => {
       formData.append("description", payload.description);
       formData.append("detailsText", payload.detailsText);
       formData.append("badgeLabel", payload.badgeLabel);
+      formData.append("isOutOfStock", String(payload.isOutOfStock));
       formData.append("image", productFileInput.files[0]);
 
       if (editingId) {

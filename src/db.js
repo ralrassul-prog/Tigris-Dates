@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS products (
   description TEXT NOT NULL DEFAULT '',
   details_text TEXT NOT NULL DEFAULT '',
   badge_label TEXT NOT NULL DEFAULT '',
+  is_out_of_stock INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -120,6 +121,7 @@ const hasProductImageUrl = productColumns.some((col) => col.name === "image_url"
 const hasProductDescription = productColumns.some((col) => col.name === "description");
 const hasProductDetailsText = productColumns.some((col) => col.name === "details_text");
 const hasProductBadgeLabel = productColumns.some((col) => col.name === "badge_label");
+const hasProductOutOfStock = productColumns.some((col) => col.name === "is_out_of_stock");
 const hasProductSortOrder = productColumns.some((col) => col.name === "sort_order");
 const hasProductUpdatedAt = productColumns.some((col) => col.name === "updated_at");
 
@@ -149,6 +151,10 @@ if (!hasProductDetailsText) {
 
 if (!hasProductBadgeLabel) {
   db.exec("ALTER TABLE products ADD COLUMN badge_label TEXT NOT NULL DEFAULT ''");
+}
+
+if (!hasProductOutOfStock) {
+  db.exec("ALTER TABLE products ADD COLUMN is_out_of_stock INTEGER NOT NULL DEFAULT 0");
 }
 
 if (!hasProductSortOrder) {
