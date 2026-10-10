@@ -23,6 +23,8 @@ const productMessage = document.getElementById("productMessage");
 const productList = document.getElementById("productList");
 const resetAccountingButton = document.getElementById("resetAccountingButton");
 const paidTotal = document.getElementById("paidTotal");
+const manualSalesTotal = document.getElementById("manualSalesTotal");
+const cashAdjustmentsTotal = document.getElementById("cashAdjustmentsTotal");
 const unpaidTotal = document.getElementById("unpaidTotal");
 const expensesTotal = document.getElementById("expensesTotal");
 const paidByZelle = document.getElementById("paidByZelle");
@@ -37,6 +39,12 @@ const expenseNameInput = document.getElementById("expenseNameInput");
 const expenseAmountInput = document.getElementById("expenseAmountInput");
 const expenseMessage = document.getElementById("expenseMessage");
 const expenseList = document.getElementById("expenseList");
+const manualTransactionForm = document.getElementById("manualTransactionForm");
+const manualTransactionTypeInput = document.getElementById("manualTransactionTypeInput");
+const manualTransactionAmountInput = document.getElementById("manualTransactionAmountInput");
+const manualTransactionDescriptionInput = document.getElementById("manualTransactionDescriptionInput");
+const manualTransactionMessage = document.getElementById("manualTransactionMessage");
+const manualTransactionList = document.getElementById("manualTransactionList");
 
 let isAuthenticated = false;
 let currentTab = "active";
@@ -76,6 +84,8 @@ function formatProductPrice(cents) {
 
 function renderSummary(summary) {
   paidTotal.textContent = summary.revenuePaid || summary.netRevenuePaid || "$0.00";
+  manualSalesTotal.textContent = summary.walkInSales || "$0.00";
+  cashAdjustmentsTotal.textContent = summary.cashAdjustments || "$0.00";
   expensesTotal.textContent = summary.expensesTotal || "$0.00";
   unpaidTotal.textContent = summary.revenueUnpaid;
   paidByZelle.textContent = summary.paidByZelle;
@@ -591,6 +601,75 @@ function renderExpenses(expenses) {
   }
 }
 
+function setManualTransactionMessage(text, isError = false) {
+  manualTransactionMessage.style.color = isError ? "#a61b1b" : "#0f766e";
+  manualTransactionMessage.textContent = text;
+}
+
+function renderManualTransactions(transactions) {
+  manualTransactionList.innerHTML = "";
+
+  if (!Array.isArray(transactions) || !transactions.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "No manual transactions recorded yet.";
+    manualTransactionList.appendChild(empty);
+    return;
+  }
+
+  const typeLabels = {
+    sale: "Walk-in sale",
+    add: "Money added",
+    subtract: "Money subtracted"
+  };
+
+  for (const transaction of transactions) {
+    const row = document.createElement("div");
+    row.className = "summary-row";
+    row.style.border = "1px solid #e8c98d";
+    row.style.borderRadius = "12px";
+    row.style.padding = "0.6rem 0.7rem";
+    row.style.background = "#fff";
+
+    const info = document.createElement("div");
+    info.className = "stacked-form";
+    info.style.gap = "0.15rem";
+
+    const title = document.createElement("strong");
+    title.textContent = `${typeLabels[transaction.type] || "Transaction"}: ${transaction.description}`;
+
+    const meta = document.createElement("span");
+    meta.className = "hint";
+    meta.textContent = new Date(transaction.created_at).toLocaleString();
+
+    const amount = document.createElement("strong");
+    const sign = transaction.type === "subtract" ? "-" : "+";
+    amount.textContent = `${sign}$${(Number(transaction.amount_cents || 0) / 100).toFixed(2)}`;
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "btn ghost";
+    removeButton.textContent = "Delete";
+    removeButton.addEventListener("click", async () => {
+      try {
+        setManualTransactionMessage(`Deleting ${transaction.description}...`);
+        await adminApi(`/api/admin/manual-transactions/${transaction.id}`, { method: "DELETE" });
+        setManualTransactionMessage(`Deleted ${transaction.description}.`);
+        await loadAdminData();
+      } catch (error) {
+        setManualTransactionMessage(error.message, true);
+      }
+    });
+
+    info.appendChild(title);
+    info.appendChild(meta);
+    row.appendChild(info);
+    row.appendChild(amount);
+    row.appendChild(removeButton);
+    manualTransactionList.appendChild(row);
+  }
+}
+
 function getVisibleOrders() {
   if (currentTab === "completed") {
     return allOrders.filter((order) => isClosedStatus(order.status));
@@ -742,11 +821,12 @@ function setTab(nextTab) {
 }
 
 async function loadAdminData() {
-  const [summaryData, ordersData, productsData, expensesData] = await Promise.all([
+  const [summaryData, ordersData, productsData, expensesData, manualTransactionsData] = await Promise.all([
     adminApi("/api/admin/summary", { method: "GET" }),
     adminApi("/api/admin/orders?limit=200", { method: "GET" }),
     adminApi("/api/admin/products", { method: "GET" }),
-    adminApi("/api/admin/expenses", { method: "GET" })
+    adminApi("/api/admin/expenses", { method: "GET" }),
+    adminApi("/api/admin/manual-transactions", { method: "GET" })
   ]);
 
   allOrders = ordersData.orders || [];
@@ -755,6 +835,7 @@ async function loadAdminData() {
   renderProducts();
   renderOrders();
   renderExpenses(expensesData.expenses || []);
+  renderManualTransactions(manualTransactionsData.transactions || []);
 }
 
 async function checkAdminSession() {
@@ -854,6 +935,33 @@ expenseForm?.addEventListener("submit", async (event) => {
     await loadAdminData();
   } catch (error) {
     setExpenseMessage(error.message, true);
+  }
+});
+
+manualTransactionForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const type = manualTransactionTypeInput.value;
+  const description = manualTransactionDescriptionInput.value.trim();
+  const amount = Number(manualTransactionAmountInput.value);
+
+  if (!description || !Number.isFinite(amount) || amount <= 0) {
+    setManualTransactionMessage("Enter a description and a valid amount.", true);
+    return;
+  }
+
+  try {
+    setManualTransactionMessage("Recording transaction...");
+    await adminApi("/api/admin/manual-transactions", {
+      method: "POST",
+      body: JSON.stringify({ type, description, amountCents: Math.round(amount * 100) })
+    });
+
+    manualTransactionForm.reset();
+    setManualTransactionMessage("Transaction recorded.");
+    await loadAdminData();
+  } catch (error) {
+    setManualTransactionMessage(error.message, true);
   }
 });
 

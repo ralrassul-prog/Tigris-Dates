@@ -49,8 +49,16 @@
             <p id="newOrdersCount" class="metric-value">0</p>
           </article>
           <article class="metric-card">
-            <p class="metric-label">Net Sales</p>
+            <p class="metric-label">Total Sales</p>
             <p id="paidTotal" class="metric-value">$0.00</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">Walk-in Sales</p>
+            <p id="manualSalesTotal" class="metric-value">$0.00</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">Cash Adjustments</p>
+            <p id="cashAdjustmentsTotal" class="metric-value">$0.00</p>
           </article>
           <article class="metric-card">
             <p class="metric-label">Unpaid</p>
@@ -107,6 +115,35 @@
           <p id="expenseMessage" class="message"></p>
         </form>
         <div id="expenseList" class="stacked-form"></div>
+      </section>
+
+      <section class="card">
+        <h3>Walk-in Sales &amp; Cash Adjustments</h3>
+        <form id="manualTransactionForm" class="stacked-form">
+          <div class="field-grid">
+            <label>
+              Entry type
+              <select id="manualTransactionTypeInput" required>
+                <option value="sale">Walk-in sale</option>
+                <option value="add">Add money (not a sale)</option>
+                <option value="subtract">Subtract money</option>
+              </select>
+            </label>
+            <label>
+              Amount (USD)
+              <input id="manualTransactionAmountInput" type="number" step="0.01" min="0.01" required />
+            </label>
+          </div>
+          <label>
+            Description
+            <input id="manualTransactionDescriptionInput" type="text" maxlength="120" placeholder="Walk-in date sale" required />
+          </label>
+          <div class="summary-row">
+            <button class="btn primary" type="submit">Record Transaction</button>
+          </div>
+          <p id="manualTransactionMessage" class="message"></p>
+        </form>
+        <div id="manualTransactionList" class="stacked-form"></div>
       </section>
 
       <section class="card">

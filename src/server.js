@@ -302,6 +302,34 @@ function getTotalExpensesCents() {
   return Number(db.prepare("SELECT COALESCE(SUM(amount_cents), 0) AS sum_cents FROM expenses").get().sum_cents || 0);
 }
 
+function getManualTransactions() {
+  return db.prepare(`
+    SELECT id, type, description, amount_cents, created_at
+    FROM manual_transactions
+    ORDER BY created_at DESC, id DESC
+  `).all();
+}
+
+function getWalkInSalesCents() {
+  return Number(db.prepare(
+    "SELECT COALESCE(SUM(amount_cents), 0) AS sum_cents FROM manual_transactions WHERE type = 'sale'"
+  ).get().sum_cents || 0);
+}
+
+function getCashAdjustmentsCents() {
+  return Number(db.prepare(`
+    SELECT COALESCE(SUM(CASE WHEN type = 'add' THEN amount_cents ELSE -amount_cents END), 0) AS sum_cents
+    FROM manual_transactions
+    WHERE type IN ('add', 'subtract')
+  `).get().sum_cents || 0);
+}
+
+function formatSignedUsd(cents) {
+  const amount = Number(cents || 0);
+  const sign = amount > 0 ? "+" : amount < 0 ? "-" : "";
+  return `${sign}${formatUsd(Math.abs(amount))}`;
+}
+
 function buildOrderSummaryText(items, totalCents, customerName, options = {}) {
   const deliveryFeeCents = Number(options.deliveryFeeCents || 0);
   const paymentMethod = String(options.paymentMethod || "").trim();
@@ -1112,7 +1140,10 @@ app.get("/api/admin/summary", requireAdmin, (_req, res) => {
   ).get().sum_cents;
 
   const totalExpensesCents = getTotalExpensesCents();
-  const netRevenuePaidCents = revenuePaidCents - totalExpensesCents;
+  const walkInSalesCents = getWalkInSalesCents();
+  const cashAdjustmentsCents = getCashAdjustmentsCents();
+  const totalSalesCents = revenuePaidCents + walkInSalesCents;
+  const netRevenuePaidCents = totalSalesCents - totalExpensesCents;
 
   return res.json({
     summary: {
@@ -1124,7 +1155,9 @@ app.get("/api/admin/summary", requireAdmin, (_req, res) => {
       cancelled,
       newOrders,
       expensesTotal: formatUsd(totalExpensesCents),
-      revenuePaid: formatUsd(netRevenuePaidCents),
+      revenuePaid: formatUsd(totalSalesCents),
+      walkInSales: formatUsd(walkInSalesCents),
+      cashAdjustments: formatSignedUsd(cashAdjustmentsCents),
       revenueUnpaid: formatUsd(revenueUnpaidCents),
       paidByZelle: formatUsd(paidByZelleCents),
       paidByCard: formatUsd(paidByCardCents),
@@ -1191,6 +1224,52 @@ app.delete("/api/admin/expenses/:expenseId", requireAdmin, (req, res) => {
   return res.json({ message: "Expense deleted." });
 });
 
+app.get("/api/admin/manual-transactions", requireAdmin, (_req, res) => {
+  return res.json({ transactions: getManualTransactions() });
+});
+
+app.post("/api/admin/manual-transactions", requireAdmin, (req, res) => {
+  const type = String(req.body?.type || "").trim();
+  const description = String(req.body?.description || "").trim();
+  const amountCents = Number(req.body?.amountCents ?? 0);
+
+  if (!["sale", "add", "subtract"].includes(type)) {
+    return res.status(400).json({ error: "Choose a valid transaction type." });
+  }
+
+  if (!description || description.length > 120) {
+    return res.status(400).json({ error: "Enter a description up to 120 characters." });
+  }
+
+  if (!Number.isFinite(amountCents) || Math.round(amountCents) < 1) {
+    return res.status(400).json({ error: "Amount must be greater than zero." });
+  }
+
+  const result = db.prepare(
+    "INSERT INTO manual_transactions (type, description, amount_cents) VALUES (?, ?, ?)"
+  ).run(type, description, Math.round(amountCents));
+  const transaction = db.prepare(
+    "SELECT id, type, description, amount_cents, created_at FROM manual_transactions WHERE id = ?"
+  ).get(result.lastInsertRowid);
+
+  return res.status(201).json({ message: "Transaction recorded.", transaction });
+});
+
+app.delete("/api/admin/manual-transactions/:transactionId", requireAdmin, (req, res) => {
+  const transactionId = Number(req.params.transactionId);
+  if (!Number.isInteger(transactionId) || transactionId < 1) {
+    return res.status(400).json({ error: "Invalid transaction id." });
+  }
+
+  const existing = db.prepare("SELECT id FROM manual_transactions WHERE id = ?").get(transactionId);
+  if (!existing) {
+    return res.status(404).json({ error: "Transaction not found." });
+  }
+
+  db.prepare("DELETE FROM manual_transactions WHERE id = ?").run(transactionId);
+  return res.json({ message: "Transaction deleted." });
+});
+
 app.post("/api/admin/reset", requireAdmin, (_req, res) => {
   const confirmation = String(_req.body?.confirmation || "").trim();
   if (confirmation !== "RESET") {
@@ -1203,13 +1282,14 @@ app.post("/api/admin/reset", requireAdmin, (_req, res) => {
     db.prepare("DELETE FROM order_items").run();
     db.prepare("DELETE FROM card_checkout_drafts").run();
     db.prepare("DELETE FROM expenses").run();
+    db.prepare("DELETE FROM manual_transactions").run();
     db.prepare("DELETE FROM orders").run();
-    db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('orders', 'order_items', 'card_checkout_drafts', 'expenses')").run();
+    db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('orders', 'order_items', 'card_checkout_drafts', 'expenses', 'manual_transactions')").run();
   });
 
   reset();
 
-  return res.json({ message: "All orders, expenses, and admin counts have been reset." });
+  return res.json({ message: "All orders, expenses, manual transactions, and admin counts have been reset." });
 });
 
 app.post("/api/orders", async (req, res) => {
