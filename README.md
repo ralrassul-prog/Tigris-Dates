@@ -9,6 +9,7 @@ A customer-friendly ordering web app for Medjool dates with:
 - One-click WhatsApp order message link
 - Owner backend endpoints for order tracking
 - Installable Android walk-in register with live sales totals
+- Owner register financials, product/packaging costs, and delivered-order partial payments
 
 ## Product Catalog
 
@@ -132,12 +133,13 @@ phone installation requires your deployed HTTPS address.
 - **Record walk-in sale** immediately creates a completed, paid walk-in
   accounting entry. It does **not** create an unpaid/pre-order, require a
   customer phone number, or collect a payment. No delivery fees, card-processing
-  fees, or automatic tax are added.
+  fees, or automatic tax are added. Select **Cash** or **Zelle** to record the
+  payment actually received; this does not collect or verify payment.
 - The entry appears under **Walk-in Sales & Cash Adjustments** in admin, with
   quantities, prices, and any discount/addition in its description. It increases
   **Walk-in Sales**, **Total Sales**, net revenue, and the applicable
   weekly/monthly/season profit figures. It does not duplicate the entry in the
-  online orders list or classify it under a particular payment method.
+  online orders list. New register sales retain their Cash/Zelle method.
 - The register fetches **all-time Total Sales** from the same SQLite accounting
   data as admin. Before sending, it shows a projection. After confirmation, it
   shows the actual before/after totals returned by the server, plus current
@@ -166,10 +168,102 @@ Accounting deletion/reset marks saved request receipts as voided and retains
 them for duplicate prevention: retrying an old request will not recreate a
 deleted sale. The reset still clears the financial totals.
 
+### Register financials
+
+Tap **Financials** at the top of `/register/`. The main purchase screen keeps
+its existing all-time current and before/after sale totals.
+
+- **Payments on fully paid orders** reads the same backend ledger, not a second
+  copy of sales. Zelle orders and register payments are grouped under Zelle.
+  All other paid sales (including cash, old walk-ins, and card) are grouped
+  under Cash as an owner-requested reporting convention. Original online
+  payment methods remain unchanged. Cash adjustments are not sales.
+- **Edit costs** accepts cumulative all-time Mix/Jumbo purchased pounds, date
+  purchase cost, inbound freight, 5/10 lb box costs, and optional per-unit
+  costs for honey, Misc, and other catalog products. Blank unit costs mean
+  unknown; zero means a confirmed zero cost. A date type with no purchases
+  can have zero pounds and zero purchase/freight costs. No sample costs are seeded.
+- Product cost uses the cumulative average purchase-plus-freight rate.
+  Only fully paid products enter cost of goods sold. Editing costs rerates
+  historical estimates; this is not batch-level accounting.
+- The all-time profit estimate subtracts products/boxes sold, existing backend
+  expenses, and recorded card fees from paid sales. Shared operating expenses
+  are allocated across fully paid date pounds for the per-lb view; honey and
+  other products do not contribute date pounds.
+- Product and packaging purchases must not also be listed as operating
+  expenses. Existing expenses are included automatically; correct duplicates
+  in admin. Record rent, utilities, delivery costs, tax, or owner pay as
+  one-time expenses when applicable. No recurring charges are invented.
+- Missing costs or historical product details explicitly mark profit as
+  provisional. Old manually entered walk-in sales may lack quantities, so
+  their product costs and inventory cannot be reconstructed automatically.
+  Existing structured quick-sale receipts are reused when available.
+- Inventory subtracts known fully paid products and delivered-but-unpaid
+  products. Historical entries without quantities make stock estimates
+  incomplete. This view is not a tax report or a bank balance.
+
+### Delivered orders and pending payments
+
+Expand **Pending payments**, then use **+ Order**:
+
+1. For an existing unpaid online order, select it in **Order source**. This
+   links its original products and agreed total instead of duplicating it.
+2. For a new store/person order, enter the customer, delivered products,
+   quantities, agreed total after discounts, and any initial partial payment.
+3. Record each received installment as Cash or Zelle. Amounts cannot exceed
+   the remaining balance. Stock leaves inventory as soon as delivery is
+   recorded.
+4. Partial receipts are shown separately and excluded from paid sales/profit
+   until the order is fully paid. At $0 balance, an online source order becomes
+   completed, or a new delivered order creates one walk-in accounting entry.
+   The complete payment history is preserved, including mixed methods.
+5. **Recently paid** shows the latest 30 closed delivered orders.
+
+Tracked online orders cannot be deleted or moved between paid/unpaid states
+from admin; use their register payment workflow. Deleting a closed manual
+transaction voids its delivered record and recovery requests. Accounting reset
+clears delivered orders, payments, and cost setup too, while retaining voided
+request IDs so old operations cannot recreate deleted entries.
+
+Expenses, delivered orders, cost edits, and payment submissions use persistent
+recovery request IDs. If a response is lost, **Retry same saved operation**
+uses the original request; never submit a replacement or clear browser storage
+until confirmed. Recovery also works after reopening/signing in. Financial
+data requires internet; financial API responses are never cached by the PWA.
+Concurrent cost edits require a refresh rather than overwriting another device.
+
+On the first financial-schema upgrade, a pre-upgrade SQLite snapshot is saved
+to `data/backups/pre-register-financials.db` (or the configured data directory).
+The deployed disk holds this snapshot; it is not committed to Git.
+
+### Financial API
+
+All `/api/admin/register-financials` endpoints require owner authentication,
+return uncached JSON, and use integer cents:
+
+- `GET /api/admin/register-financials`: combined ledger totals, costs,
+  completeness warnings, expenses, pending/closed orders, and available
+  unpaid online orders.
+- `POST /api/admin/register-financials/costs`: `{requestId, revision, settings}`.
+  Settings include `mix`/`jumbo` `{pounds, purchaseCents, freightCents}`,
+  `box5Cents`, `box10Cents`, and `unitCosts` keyed by `preset:<id>` or
+  `product:<id>`.
+- `POST /api/admin/register-financials/expenses`:
+  `{requestId, name, amountCents}`.
+- `POST /api/admin/register-financials/delivered`:
+  `{requestId, name, items: [{id, quantity}], totalCents, initialCents, paymentMethod}`
+  or `{requestId, sourceOrderId, initialCents, paymentMethod}`.
+- `POST /api/admin/register-financials/delivered/:id/payments`:
+  `{requestId, amountCents, paymentMethod}`.
+
+Financial mutations replay identical saved requests, reject conflicting IDs,
+and commit their accounting changes and recovery responses atomically.
+
 The service worker is scoped to `/register/` and caches only public register
 assets, never admin API responses, passwords, or financial data. Browser
 recovery storage does include the current sale/receipt, so use a trusted device
-with a screen lock. Sign out when finished.
+with a screen lock. Financial recovery storage may also contain the current
+customer, costs, expense, or payment operation. Sign out when finished.
 
 ### Register API
 

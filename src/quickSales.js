@@ -46,6 +46,10 @@ function validateSale(body) {
   if (!Number.isSafeInteger(body.adjustmentCents) || Math.abs(body.adjustmentCents) > MAX_SALE_CENTS) {
     return { error: "Enter a valid adjustment in whole cents." };
   }
+  const paymentMethod = body.paymentMethod === undefined ? "cash" : body.paymentMethod;
+  if (!["cash", "zelle"].includes(paymentMethod)) {
+    return { error: "Choose Cash or Zelle for the received payment." };
+  }
   const items = presets.filter(preset => quantities.has(preset.id)).map(preset => ({
     ...preset,
     quantity: quantities.get(preset.id)
@@ -60,6 +64,7 @@ function validateSale(body) {
     items,
     subtotalCents,
     adjustmentCents: body.adjustmentCents,
+    paymentMethod,
     totalCents
   };
 }
@@ -67,7 +72,8 @@ function validateSale(body) {
 function recordQuickSale(db, sale) {
   const payloadJson = JSON.stringify({
     items: sale.items.map(({ id, quantity }) => ({ id, quantity })),
-    adjustmentCents: sale.adjustmentCents
+    adjustmentCents: sale.adjustmentCents,
+    ...(sale.paymentMethod === "zelle" ? { paymentMethod: "zelle" } : {})
   });
   return db.transaction(() => {
     const existing = db.prepare("SELECT * FROM quick_sale_receipts WHERE request_id = ?").get(sale.requestId);
@@ -85,8 +91,10 @@ function recordQuickSale(db, sale) {
     const description = sale.items.map(item => `${item.name} $${item.priceCents / 100} x${item.quantity}`).join("; ")
       + (sale.adjustmentCents ? `; ${sale.adjustmentCents < 0 ? "Discount" : "Addition"} $${(Math.abs(sale.adjustmentCents) / 100).toFixed(2)}` : "");
     const result = db.prepare(
-      "INSERT INTO manual_transactions (type, description, amount_cents) VALUES ('sale', ?, ?)"
-    ).run(description, sale.totalCents);
+      "INSERT INTO manual_transactions (type, description, amount_cents, payment_method, items_json) VALUES ('sale', ?, ?, ?, ?)"
+    ).run(description, sale.totalCents, sale.paymentMethod || "cash", JSON.stringify(sale.items.map(item => ({
+      ...item, id: `preset:${item.id}`
+    }))));
     const transaction = db.prepare("SELECT id, created_at FROM manual_transactions WHERE id = ?").get(result.lastInsertRowid);
     const totals = getSalesTotals(db);
     const receipt = {
@@ -98,6 +106,7 @@ function recordQuickSale(db, sale) {
       subtotalCents: sale.subtotalCents,
       adjustmentCents: sale.adjustmentCents,
       totalCents: sale.totalCents,
+      paymentMethod: sale.paymentMethod || "cash",
       salesBeforeCents: before.totalSalesCents,
       salesAfterCents: totals.totalSalesCents,
       createdAt: transaction.created_at,

@@ -11,13 +11,15 @@ let maxSaleCents = 99999999;
 let totals = null;
 let syncedAt = null;
 let busy = false;
+let financialBusy = false;
+let financialRecoveryLocked = false;
 let refreshing = false;
 let storageFailed = false;
 let storedSnapshot = null;
 let authenticated = false;
 let installPrompt = null;
 let undoHistory = [];
-let state = { quantities: {}, adjustmentType: "discount", adjustmentAmount: "", pending: null, receipt: null };
+let state = { quantities: {}, adjustmentType: "discount", adjustmentAmount: "", paymentMethod: "cash", pending: null, receipt: null };
 
 class ApiError extends Error {
   constructor(message, status) {
@@ -59,6 +61,8 @@ function showError(error) {
     $("login-section").hidden = false;
     $("protected").hidden = true;
     $("logout").hidden = true;
+    $("financial-nav").hidden = true;
+    $("financial-dialog").close();
     $("connection").textContent = "Sign in to continue. Your sale is kept on this device.";
     $("connection").className = "";
   }
@@ -90,7 +94,7 @@ function restore() {
     storageFailed = false;
     undoHistory = [];
     if (!raw) {
-      state = { quantities: {}, adjustmentType: "discount", adjustmentAmount: "", pending: null, receipt: null };
+      state = { quantities: {}, adjustmentType: "discount", adjustmentAmount: "", paymentMethod: "cash", pending: null, receipt: null };
       $("adjustment-type").value = "discount";
       $("adjustment-amount").value = "";
       return;
@@ -105,7 +109,10 @@ function restore() {
       || (saved.receipt && (!Number.isSafeInteger(saved.receipt.totalCents) || typeof saved.receipt.id !== "string"))) {
       throw new Error("Stored sale recovery data is invalid.");
     }
-    state = saved;
+    if (saved.paymentMethod !== undefined && !["cash", "zelle"].includes(saved.paymentMethod)) {
+      throw new Error("Stored payment method is invalid.");
+    }
+    state = { ...saved, paymentMethod: saved.paymentMethod || "cash" };
     $("adjustment-type").value = state.adjustmentType;
     $("adjustment-amount").value = state.adjustmentAmount;
     if (state.pending) {
@@ -140,7 +147,7 @@ function calculation() {
 }
 
 function locked() {
-  return busy || Boolean(state.pending) || Boolean(state.receipt) || storageFailed;
+  return busy || financialBusy || financialRecoveryLocked || Boolean(state.pending) || Boolean(state.receipt) || storageFailed;
 }
 
 function render() {
@@ -156,12 +163,17 @@ function render() {
   $("adjustment-type").disabled = isLocked || !sale.count;
   $("undo").disabled = isLocked || !undoHistory.length;
   $("clear").disabled = isLocked || !sale.count;
-  $("send").disabled = busy || refreshing || storageFailed || !authenticated
+  $("send").disabled = busy || financialBusy || financialRecoveryLocked || refreshing || storageFailed || !authenticated
     || (!state.receipt && (!navigator.onLine || (!state.pending && (!sale.count || Boolean(sale.error)))));
   $("send-label").textContent = busy ? "Confirming sale..." : state.receipt ? "Start next sale"
     : state.pending ? "Retry same sale" : "Record walk-in sale";
-  $("logout").disabled = busy;
-  $("refresh").disabled = refreshing || busy || !navigator.onLine;
+  $("logout").disabled = busy || financialBusy;
+  $("financial-nav").disabled = busy || financialBusy;
+  $("refresh").disabled = refreshing || busy || financialBusy || !navigator.onLine;
+  for (const input of document.querySelectorAll('input[name="payment-method"]')) {
+    input.checked = input.value === (state.paymentMethod || "cash");
+    input.disabled = isLocked;
+  }
   for (const button of $("presets").children) {
     const quantity = state.quantities[button.dataset.id] || 0;
     button.disabled = isLocked || quantity >= maxQuantity;
@@ -245,7 +257,7 @@ function buildPresets() {
 }
 
 async function refreshTotals() {
-  if (refreshing || busy) return;
+  if (refreshing || busy || financialBusy) return;
   refreshing = true;
   render();
   try {
@@ -254,6 +266,7 @@ async function refreshTotals() {
     syncedAt = new Date();
     $("app-error").textContent = "";
     $("reconnect").hidden = true;
+    if (!$("financial-screen").hidden && typeof loadFinancials === "function") await loadFinancials();
   } catch (error) {
     showError(error);
   } finally {
@@ -276,6 +289,7 @@ async function openRegister() {
   $("login-section").hidden = true;
   $("protected").hidden = false;
   $("logout").hidden = false;
+  $("financial-nav").hidden = false;
   $("app-error").textContent = "";
   $("reconnect").hidden = true;
   $("connection").textContent = navigator.onLine ? "Connected to Tigris Dates" : "Offline - internet required to record sales";
@@ -283,6 +297,7 @@ async function openRegister() {
   buildPresets();
   restore();
   render();
+  if (typeof restoreFinancialOperation === "function") restoreFinancialOperation();
 }
 
 function showReceipt() {
@@ -293,10 +308,10 @@ function showReceipt() {
 }
 
 $("send").addEventListener("click", async () => {
-  if (busy || refreshing || storageFailed || !authenticated) return;
+  if (busy || financialBusy || financialRecoveryLocked || refreshing || storageFailed || !authenticated) return;
   if (state.receipt) {
     const previous = state;
-    state = { quantities: {}, adjustmentType: "discount", adjustmentAmount: "", pending: null, receipt: null };
+    state = { quantities: {}, adjustmentType: "discount", adjustmentAmount: "", paymentMethod: "cash", pending: null, receipt: null };
     if (!persist()) {
       state = previous;
       render();
@@ -323,7 +338,8 @@ $("send").addEventListener("click", async () => {
     state.pending = {
       requestId: crypto.randomUUID(),
       items: sale.items.map(({ id, quantity }) => ({ id, quantity })),
-      adjustmentCents: sale.adjustmentCents
+      adjustmentCents: sale.adjustmentCents,
+      paymentMethod: state.paymentMethod || "cash"
     };
     if (!persist()) {
       state.pending = null;
@@ -397,6 +413,15 @@ for (const id of ["adjustment-type", "adjustment-amount"]) {
   });
 }
 
+for (const input of document.querySelectorAll('input[name="payment-method"]')) {
+  input.addEventListener("change", () => {
+    if (locked()) return;
+    state.paymentMethod = input.value;
+    persist();
+    render();
+  });
+}
+
 $("login-form").addEventListener("submit", async event => {
   event.preventDefault();
   $("login-button").disabled = true;
@@ -412,13 +437,15 @@ $("login-form").addEventListener("submit", async event => {
 });
 
 $("logout").addEventListener("click", async () => {
-  if (busy) return;
+  if (busy || financialBusy) return;
   try {
     await api("/api/admin/logout", {});
     authenticated = false;
     $("protected").hidden = true;
     $("login-section").hidden = false;
     $("logout").hidden = true;
+    $("financial-nav").hidden = true;
+    $("financial-dialog").close();
     $("connection").textContent = "Signed out. Unfinished sales are kept on this device.";
     $("connection").className = "";
     $("app-error").textContent = "";

@@ -12,6 +12,7 @@ const Stripe = require("stripe");
 
 const db = require("./db");
 const { presets, MAX_SALE_CENTS, MAX_QUANTITY, getSalesTotals, validateSale, recordQuickSale } = require("./quickSales");
+const registerFinancials = require("./registerFinancials");
 const {
   listProducts,
   getProductById,
@@ -905,6 +906,38 @@ app.post("/api/admin/quick-sales", requireAdmin, (req, res) => {
   }
 });
 
+app.use("/api/admin/register-financials", requireAdmin, (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
+function financialHandler(action) {
+  return (req, res) => {
+    try {
+      const result = action(req);
+      res.json(result);
+    } catch (error) {
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      console.error("Register financial operation failed:", error);
+      res.status(500).json({ error: "Financial operation could not be confirmed. Retry the same saved operation, not a replacement." });
+    }
+  };
+}
+
+app.get("/api/admin/register-financials", financialHandler(() => registerFinancials.getFinancials(db)));
+app.post("/api/admin/register-financials/costs", financialHandler(req => registerFinancials.saveCosts(db, req.body)));
+app.post("/api/admin/register-financials/expenses", financialHandler(req => registerFinancials.recordExpense(db, req.body)));
+app.post("/api/admin/register-financials/delivered", financialHandler(req => registerFinancials.createDelivered(db, req.body)));
+app.post("/api/admin/register-financials/delivered/:id/payments", financialHandler(req => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    const error = new Error("Invalid delivered order ID.");
+    error.status = 400;
+    throw error;
+  }
+  return registerFinancials.recordPayment(db, id, req.body);
+}));
+
 app.get("/api/products", (_req, res) => {
   return res.json({ products: listProducts() });
 });
@@ -1066,6 +1099,10 @@ app.patch("/api/admin/orders/:orderId/status", requireAdmin, (req, res) => {
     });
   }
 
+  const delivered = db.prepare("SELECT status FROM delivered_orders WHERE source_order_id = ? AND status != 'voided'").get(orderId);
+  if (delivered && (delivered.status === "pending" || !registerFinancials.PAID.has(nextStatus))) {
+    return res.status(409).json({ error: "This delivered order is tracked in register Financials. Record its remaining payments there; do not change its accounting status here." });
+  }
   const update = db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(nextStatus, orderId);
   if (update.changes === 0) {
     return res.status(404).json({ error: "Order not found." });
@@ -1112,6 +1149,9 @@ app.delete("/api/admin/orders/:orderId", requireAdmin, (req, res) => {
     return res.status(400).json({ error: "Invalid order id." });
   }
 
+  if (db.prepare("SELECT id FROM delivered_orders WHERE source_order_id = ? AND status != 'voided'").get(orderId)) {
+    return res.status(409).json({ error: "This order has delivered-payment records. Use accounting reset only if you intend to remove the entire ledger." });
+  }
   const existing = db.prepare("SELECT id FROM orders WHERE id = ?").get(orderId);
   if (!existing) {
     return res.status(404).json({ error: "Order not found." });
@@ -1253,7 +1293,10 @@ app.delete("/api/admin/expenses/:expenseId", requireAdmin, (req, res) => {
     return res.status(404).json({ error: "Expense not found." });
   }
 
-  db.prepare("DELETE FROM expenses WHERE id = ?").run(expenseId);
+  db.transaction(() => {
+    db.prepare("DELETE FROM expenses WHERE id = ?").run(expenseId);
+    db.prepare("UPDATE register_requests SET voided = 1 WHERE kind = 'expense' AND entity_id = ?").run(expenseId);
+  })();
   return res.json({ message: "Expense deleted." });
 });
 
@@ -1301,6 +1344,7 @@ app.delete("/api/admin/manual-transactions/:transactionId", requireAdmin, (req, 
 
   db.transaction(() => {
     db.prepare("UPDATE quick_sale_receipts SET voided = 1 WHERE transaction_id = ?").run(transactionId);
+    registerFinancials.voidForTransaction(db, transactionId);
     db.prepare("DELETE FROM manual_transactions WHERE id = ?").run(transactionId);
   })();
   return res.json({ message: "Transaction deleted." });
@@ -1315,6 +1359,10 @@ app.post("/api/admin/reset", requireAdmin, (_req, res) => {
   }
 
   const reset = db.transaction(() => {
+    db.prepare("UPDATE register_requests SET voided = 1").run();
+    db.prepare("DELETE FROM delivered_payments").run();
+    db.prepare("DELETE FROM delivered_orders").run();
+    db.prepare("DELETE FROM register_costs").run();
     db.prepare("DELETE FROM order_items").run();
     db.prepare("DELETE FROM card_checkout_drafts").run();
     db.prepare("DELETE FROM expenses").run();

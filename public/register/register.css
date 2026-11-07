@@ -98,3 +98,55 @@ a { color: var(--green); }
   .total-row { margin: 8px 0; }
 }
 @media (prefers-reduced-motion: reduce) { .preset:active { transform: none; } }
+
+.nav { border: 1px solid #ffffff48; background: #ffffff0a; color: #fcf4e3; font-size: 12px; border-radius: 8px; min-height: 38px; padding: 8px 10px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.payment-selector { border: 0; padding: 0; margin: 12px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.payment-selector > span { font-size: 12px; font-weight: 650; }
+.segments { display: flex; gap: 3px; background: #eeeede; border-radius: 9px; padding: 3px; }
+.segments label { position: relative; cursor: pointer; }
+.segments input { position: absolute; opacity: 0; width: 1px; }
+.segments span { display: block; padding: 10px 19px; border-radius: 7px; font-size: 12px; }
+.segments input:checked + span { background: var(--green); color: white; }
+.segments input:focus-visible + span { outline: 3px solid #b77929; }
+.segments input:disabled + span { opacity: .5; cursor: default; }
+#financial-screen { padding-bottom: 20px; }
+.hint { color: var(--muted); font-size: 11px; line-height: 1.6; }
+.error { color: #a61b1b; font-size: 12px; line-height: 1.6; }
+.error:empty, .notice:empty { display: none; }
+.notice:not(:empty) { padding: 10px; border-radius: 9px; background: #e8eee4; font-size: 12px; line-height: 1.6; }
+.warning { background: #f5e6c7; border: 1px solid #e4cf9e; padding: 11px; border-radius: 10px; color: #765318; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.profit-card { background: var(--green); color: #fffaf0; border-radius: 17px; padding: 19px; margin: 14px 0 12px; }
+.eyebrow { font-size: 10px; letter-spacing: 1.2px; font-weight: 700; color: #cadac7; }
+.profit-value { font-size: 40px; font-weight: 700; letter-spacing: -1.6px; margin: 7px 0; overflow-wrap: anywhere; }
+.profit-card p { margin: 0; color: #cadac7; font-size: 12px; line-height: 1.6; }
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-bottom: 14px; }
+.metric { background: #fffdf8; border: 1px solid #e2dfd3; border-radius: 12px; padding: 12px; overflow-wrap: anywhere; }
+.metric span { display: block; font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+.metric strong { font-size: 22px; letter-spacing: -.6px; }
+.metric h3 { margin: 0 0 9px; font-size: 12px; }
+.panel { background: #fffdf8; border: 1px solid #e2dfd3; border-radius: 13px; padding: 14px; margin: 12px 0; }
+.panel h2 { margin: 0; font-size: 14px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; margin: 11px 0; }
+.row > span { min-width: 0; overflow-wrap: anywhere; }
+.row strong { font-variant-numeric: tabular-nums; }
+.line { border-top: 1px solid #e2dfd3; padding-top: 10px; }
+.add { border: 1px solid #c8d1c2; background: #e8eee4; color: var(--green); border-radius: 8px; padding: 9px 10px; min-height: 40px; font-size: 12px; font-weight: 650; }
+.pending-card { border: 1px solid #e2dfd3; border-radius: 11px; padding: 12px; margin: 10px 0; }
+.pending-card h3 { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.pending-card .add { width: 100%; margin-top: 6px; }
+.badge { background: #f5e6c7; color: #765318; border-radius: 20px; padding: 5px 8px; font-size: 10px; white-space: nowrap; }
+.badge.closed { background: #e8eee4; color: var(--green); }
+.expense-row { border-bottom: 1px solid #e2dfd3; padding-bottom: 9px; }
+.expense-row small { display: block; color: var(--muted); margin-top: 3px; }
+dialog { border: 0; border-radius: 19px; background: var(--cream); color: var(--ink); padding: 20px; width: min(410px, calc(100% - 24px)); max-height: 90dvh; overflow-y: auto; }
+dialog::backdrop { background: #14281fc0; }
+dialog h2 { font-size: 18px; margin: 0; }
+dialog form, #financial-fields, .form-group { display: grid; gap: 12px; }
+dialog form { margin-top: 15px; }
+dialog label { display: grid; gap: 5px; font-size: 12px; font-weight: 600; }
+dialog input, dialog select { width: 100%; min-width: 0; border: 1px solid #d5dacd; border-radius: 8px; background: white; color: var(--ink); min-height: 42px; padding: 9px; }
+dialog fieldset { border: 1px solid #e2dfd3; border-radius: 10px; padding: 12px; display: grid; gap: 9px; min-width: 0; }
+dialog legend { font-size: 12px; font-weight: 650; }
+.delivered-line { display: grid; grid-template-columns: minmax(0, 1fr) 68px 38px; gap: 7px; align-items: end; }
+.delivered-line button { min-height: 42px; }

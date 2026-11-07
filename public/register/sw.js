@@ -1,11 +1,12 @@
 "use strict";
 
-const CACHE = "tigris-register-shell-v1";
+const CACHE = "tigris-register-shell-v2";
 const ASSETS = [
   "/register/",
   "/register/index.html",
   "/register/register.css",
   "/register/register.js",
+  "/register/financials.js",
   "/register/manifest.webmanifest",
   "/register/icon-192.png",
   "/register/icon-512.png",

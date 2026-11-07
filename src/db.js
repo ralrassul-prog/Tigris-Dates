@@ -312,4 +312,14 @@ if (hasLegacyUserId) {
 db.hasLegacyUserId = hasLegacyUserId;
 db.guestUserId = guestUserId;
 
+if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'delivered_orders'").get()) {
+  const backupDir = path.join(dataDir, "backups");
+  fs.mkdirSync(backupDir, { recursive: true });
+  const backupPath = path.join(backupDir, "pre-register-financials.db");
+  if (!fs.existsSync(backupPath)) {
+    db.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`);
+  }
+}
+require("./registerFinancials").initialize(db);
+
 module.exports = db;

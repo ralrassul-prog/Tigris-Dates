@@ -5,16 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#183d32">
   <meta name="description" content="Tigris Dates walk-in sales register">
-  <title>Tigris Dates | Quick Sale</title>
+  <title>Tigris Dates | Sales &amp; Financials</title>
   <link rel="manifest" href="/register/manifest.webmanifest">
   <link rel="icon" type="image/png" href="/register/icon-192.png">
   <link rel="stylesheet" href="/register/register.css">
   <script src="/register/register.js" defer></script>
+  <script src="/register/financials.js" defer></script>
 </head>
 <body>
   <div class="register">
     <header>
-      <div class="brand-row"><span class="brand">Tigris Dates</span><span class="mode">QUICK SALE</span></div>
+      <div class="brand-row"><span class="brand">Tigris Dates</span><button id="financial-nav" type="button" class="nav" aria-controls="financial-screen" aria-expanded="false" hidden>Financials &#8599;</button></div>
       <div class="header-tools">
         <span>Final sales &middot; Walk-in</span>
         <button id="install" type="button">Install app</button>
@@ -35,6 +36,7 @@
     <p id="app-error" role="alert"></p>
     <button id="reconnect" class="reconnect" type="button" hidden>Reconnect</button>
     <div id="protected" hidden>
+      <div id="sale-screen">
       <main>
         <section class="sales" aria-label="Total sales">
           <div class="sales-heading"><span>TOTAL SALES &middot; ALL TIME</span><button id="refresh" type="button">Refresh</button></div>
@@ -65,14 +67,92 @@
           <input id="adjustment-amount" type="text" inputmode="decimal" aria-label="Adjustment amount in dollars" aria-describedby="adjustment-error" placeholder="0.00" autocomplete="off">
         </div>
         <p id="adjustment-error" role="alert"></p>
+        <fieldset class="payment-selector">
+          <legend class="visually-hidden">Received payment method</legend>
+          <span>Paid with</span>
+          <div class="segments">
+            <label><input type="radio" name="payment-method" value="cash" checked><span>Cash</span></label>
+            <label><input type="radio" name="payment-method" value="zelle"><span>Zelle</span></label>
+          </div>
+        </fieldset>
         <div class="total-row" aria-live="polite" aria-atomic="true">
           <span>Sale total</span><output id="total">$0.00</output>
         </div>
         <button class="primary send" id="send" type="button" disabled><span id="send-label">Record walk-in sale</span><span aria-hidden="true">&rarr;</span></button>
-        <p class="footnote">Final walk-in sale (no card charge) &middot; <a href="/admin.html">Open admin</a></p>
+        <p class="footnote">Record only after payment is received. No payment is collected here.<br><a href="/admin.html">Open admin</a></p>
       </footer>
+      </div>
+      <main id="financial-screen" hidden>
+        <div class="section-heading"><h1 id="financial-title" tabindex="-1">Your financials</h1><span>All time</span></div>
+        <div class="section-heading"><span id="financial-synced" class="hint">Not loaded</span><button id="financial-refresh" class="text-button" type="button">Refresh</button></div>
+        <p id="financial-error" class="error" role="alert"></p>
+        <p id="financial-notice" class="notice" role="status"></p>
+        <section id="financial-recovery" class="warning" hidden>
+          <p id="financial-recovery-text"></p>
+          <button id="financial-retry" class="add" type="button">Retry same saved operation</button>
+        </section>
+        <div id="financial-data" hidden>
+          <section class="profit-card" aria-label="Estimated net profit">
+            <div id="profit-label" class="eyebrow">NET PROFIT &middot; ESTIMATE</div>
+            <div id="net-profit" class="profit-value">--</div><p id="profit-verdict"></p>
+          </section>
+          <div class="metrics">
+            <div class="metric"><span>Total sales</span><strong id="financial-revenue">--</strong></div>
+            <div class="metric"><span>Net margin</span><strong id="financial-margin">--</strong></div>
+          </div>
+          <p class="hint">Fully paid orders only. Delivered orders awaiting payment are tracked separately below.</p>
+          <p id="cost-warning" class="warning" hidden></p>
+          <section class="panel">
+            <h2>Where your money goes</h2>
+            <div class="row"><span>Sales, after discounts</span><strong id="breakdown-sales"></strong></div>
+            <div class="row"><span>Products &amp; boxes sold</span><strong id="financial-cogs"></strong></div>
+            <div class="row"><span>Rent &amp; other expenses</span><strong id="financial-overhead"></strong></div>
+            <div class="row"><span>Recorded card fees</span><strong id="financial-fees"></strong></div>
+            <div class="row line"><strong>Estimated net profit</strong><strong id="breakdown-profit"></strong></div>
+            <p class="hint">Paid-order estimate, not bank balance or accrual accounting. Unsold stock is not deducted from profit. Tax, delivery costs, and owner pay are excluded unless recorded as expenses. Existing backend expenses are included; don't add them again.</p>
+          </section>
+          <section class="panel">
+            <div class="section-heading"><h2>What does 1 lb cost?</h2><button id="edit-costs" class="text-button" type="button">Edit costs</button></div>
+            <div id="cost-tiles" class="metrics"></div>
+            <p class="hint">Full cost = dates + inbound freight + box + shared expenses divided across fully paid date pounds. Honey and other products are excluded from date weight.</p>
+            <details><summary>See cost details &amp; inventory</summary><div id="cost-details"></div></details>
+          </section>
+          <section class="panel">
+            <details id="pending-details">
+              <summary id="pending-summary">Pending payments</summary>
+              <div class="section-heading"><h2>Delivered, not fully paid</h2><button id="add-delivered" class="add" type="button">+ Order</button></div>
+              <div class="row"><span>Still owed</span><strong id="pending-balance"></strong></div>
+              <div class="row"><span>Partial payments received</span><strong id="pending-collected"></strong></div>
+              <p class="hint">Partial payments stay here until the balance is $0. Then the full order and its product costs enter sales and profit once. Delivered stock leaves inventory immediately.</p>
+              <div id="pending-orders"></div>
+              <details><summary id="closed-summary">Recently paid</summary><div id="closed-orders"></div></details>
+            </details>
+          </section>
+          <section class="panel">
+            <div class="section-heading"><h2>Expenses</h2><button id="add-expense" class="add" type="button">+ Expense</button></div>
+            <div id="financial-expenses"></div>
+            <p class="hint">All existing backend expenses are included. Product purchases and boxes belong in Edit costs, not here. If a product purchase is already listed as an expense, correct it in admin before trusting profit to avoid double-counting.</p>
+          </section>
+          <section class="panel">
+            <h2>Payments on fully paid orders</h2>
+            <div class="row"><span>Cash <small class="hint">(all non-Zelle sales)</small></span><strong id="cash-sales"></strong></div>
+            <div class="row"><span>Zelle</span><strong id="zelle-sales"></strong></div>
+            <div class="row line"><strong>Combined paid sales</strong><strong id="combined-paid-sales"></strong></div>
+            <p class="hint">Existing backend sales + new purchases + closed pending orders, counted once. Walk-ins, cash, card, and any other non-Zelle sales are grouped under Cash without rewriting old records. Cash adjustments are not sales. Open partial payments are shown separately above.</p>
+          </section>
+        </div>
+      </main>
     </div>
     <noscript><p class="login">Enable JavaScript to use the register.</p></noscript>
   </div>
+  <dialog id="financial-dialog" aria-labelledby="financial-dialog-title">
+    <div class="section-heading"><h2 id="financial-dialog-title"></h2><button id="financial-cancel" class="text-button" type="button">Cancel</button></div>
+    <p id="financial-dialog-hint" class="hint"></p>
+    <form id="financial-form">
+      <div id="financial-fields"></div>
+      <p id="financial-form-error" class="error" role="alert"></p>
+      <button id="financial-save" class="primary" type="submit">Save</button>
+    </form>
+  </dialog>
 </body>
 </html>
