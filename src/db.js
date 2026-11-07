@@ -3,7 +3,9 @@ const path = require("path");
 const Database = require("better-sqlite3");
 const { products: seedProducts } = require("./config/products");
 
-const dataDir = path.join(__dirname, "..", "data");
+const dataDir = process.env.TIGRIS_DATA_DIR
+  ? path.resolve(process.env.TIGRIS_DATA_DIR)
+  : path.join(__dirname, "..", "data");
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
@@ -101,6 +103,14 @@ CREATE TABLE IF NOT EXISTS manual_transactions (
   description TEXT NOT NULL,
   amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS quick_sale_receipts (
+  request_id TEXT PRIMARY KEY,
+  transaction_id INTEGER NOT NULL,
+  payload_json TEXT NOT NULL,
+  receipt_json TEXT NOT NULL,
+  voided INTEGER NOT NULL DEFAULT 0
 );
 `);
 

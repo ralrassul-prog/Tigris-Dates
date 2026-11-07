@@ -11,6 +11,7 @@ const multer = require("multer");
 const Stripe = require("stripe");
 
 const db = require("./db");
+const { presets, MAX_SALE_CENTS, MAX_QUANTITY, getSalesTotals, validateSale, recordQuickSale } = require("./quickSales");
 const {
   listProducts,
   getProductById,
@@ -37,7 +38,7 @@ const CARD_FEE_PERCENT = (() => {
 })();
 const ADMIN_SESSION_COOKIE = "tigris_admin_session";
 const ADMIN_SESSION_TTL_MS = 1000 * 60 * 60 * 12;
-const uploadDir = path.join(__dirname, "..", "data", "uploads");
+const uploadDir = path.join(path.dirname(db.name), "uploads");
 
 fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -310,10 +311,11 @@ function getManualTransactions() {
   `).all();
 }
 
-function getWalkInSalesCents() {
+function getWalkInSalesCents(period = null) {
   return Number(db.prepare(
-    "SELECT COALESCE(SUM(amount_cents), 0) AS sum_cents FROM manual_transactions WHERE type = 'sale'"
-  ).get().sum_cents || 0);
+    `SELECT COALESCE(SUM(amount_cents), 0) AS sum_cents FROM manual_transactions
+     WHERE type = 'sale' AND (? IS NULL OR date(created_at) >= date('now', ?))`
+  ).get(period, period).sum_cents || 0);
 }
 
 function getCashAdjustmentsCents() {
@@ -872,6 +874,37 @@ app.post("/api/admin/logout", (_req, res) => {
   return res.json({ message: "Admin logged out." });
 });
 
+app.use("/api/admin/quick-sales", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  return next();
+});
+
+app.get("/api/admin/quick-sales", requireAdmin, (_req, res) => {
+  return res.json({
+    presets,
+    maxSaleCents: MAX_SALE_CENTS,
+    maxQuantity: MAX_QUANTITY,
+    totals: getSalesTotals(db)
+  });
+});
+
+app.post("/api/admin/quick-sales", requireAdmin, (req, res) => {
+  const sale = validateSale(req.body);
+  if (sale.error) {
+    return res.status(400).json({ error: sale.error });
+  }
+  try {
+    const result = recordQuickSale(db, sale);
+    if (result.conflict) {
+      return res.status(409).json({ error: "This sale request ID was already used with different items. Retry the original sale." });
+    }
+    return res.status(result.replayed ? 200 : 201).json(result);
+  } catch (error) {
+    console.error("Unable to record walk-in sale:", error);
+    return res.status(500).json({ error: "Unable to confirm this sale. Retry the same sale; it will not be recorded twice." });
+  }
+});
+
 app.get("/api/products", (_req, res) => {
   return res.json({ products: listProducts() });
 });
@@ -1170,13 +1203,13 @@ app.get("/api/admin/summary", requireAdmin, (_req, res) => {
     profit: {
       weekly: formatUsd(db.prepare(
         "SELECT COALESCE(SUM(total_cents - card_fee_cents), 0) AS sum_cents FROM orders WHERE status IN ('paid', 'ready_for_pickup', 'completed') AND date(created_at) >= date('now', '-7 days')"
-      ).get().sum_cents - totalExpensesCents),
+      ).get().sum_cents + getWalkInSalesCents("-7 days") - totalExpensesCents),
       monthly: formatUsd(db.prepare(
         "SELECT COALESCE(SUM(total_cents - card_fee_cents), 0) AS sum_cents FROM orders WHERE status IN ('paid', 'ready_for_pickup', 'completed') AND date(created_at) >= date('now', 'start of month')"
-      ).get().sum_cents - totalExpensesCents),
+      ).get().sum_cents + getWalkInSalesCents("start of month") - totalExpensesCents),
       season: formatUsd(db.prepare(
         "SELECT COALESCE(SUM(total_cents - card_fee_cents), 0) AS sum_cents FROM orders WHERE status IN ('paid', 'ready_for_pickup', 'completed')"
-      ).get().sum_cents - totalExpensesCents)
+      ).get().sum_cents + walkInSalesCents - totalExpensesCents)
     }
   });
 });
@@ -1266,7 +1299,10 @@ app.delete("/api/admin/manual-transactions/:transactionId", requireAdmin, (req, 
     return res.status(404).json({ error: "Transaction not found." });
   }
 
-  db.prepare("DELETE FROM manual_transactions WHERE id = ?").run(transactionId);
+  db.transaction(() => {
+    db.prepare("UPDATE quick_sale_receipts SET voided = 1 WHERE transaction_id = ?").run(transactionId);
+    db.prepare("DELETE FROM manual_transactions WHERE id = ?").run(transactionId);
+  })();
   return res.json({ message: "Transaction deleted." });
 });
 
@@ -1282,6 +1318,7 @@ app.post("/api/admin/reset", requireAdmin, (_req, res) => {
     db.prepare("DELETE FROM order_items").run();
     db.prepare("DELETE FROM card_checkout_drafts").run();
     db.prepare("DELETE FROM expenses").run();
+    db.prepare("UPDATE quick_sale_receipts SET voided = 1").run();
     db.prepare("DELETE FROM manual_transactions").run();
     db.prepare("DELETE FROM orders").run();
     db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('orders', 'order_items', 'card_checkout_drafts', 'expenses', 'manual_transactions')").run();
@@ -1495,7 +1532,11 @@ app.use((_req, res) => {
   return res.sendFile(path.join(__dirname, "..", "public", "index.html"));
 });
 
-app.listen(port, () => {
-  // Startup info is intentionally concise for hosting logs.
-  console.log(`Tigris Dates app running on ${baseUrl}`);
-});
+if (require.main === module) {
+  app.listen(port, () => {
+    // Startup info is intentionally concise for hosting logs.
+    console.log(`Tigris Dates app running on ${baseUrl}`);
+  });
+}
+
+module.exports = app;

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#183d32">
+  <meta name="description" content="Tigris Dates walk-in sales register">
+  <title>Tigris Dates | Quick Sale</title>
+  <link rel="manifest" href="/register/manifest.webmanifest">
+  <link rel="icon" type="image/png" href="/register/icon-192.png">
+  <link rel="stylesheet" href="/register/register.css">
+  <script src="/register/register.js" defer></script>
+</head>
+<body>
+  <div class="register">
+    <header>
+      <div class="brand-row"><span class="brand">Tigris Dates</span><span class="mode">QUICK SALE</span></div>
+      <div class="header-tools">
+        <span>Final sales &middot; Walk-in</span>
+        <button id="install" type="button">Install app</button>
+        <button id="logout" type="button" hidden>Sign out</button>
+      </div>
+      <p id="install-help" hidden>On Android, open this page in Chrome, then choose Install app or Add to Home screen from the menu. Installation requires HTTPS.</p>
+    </header>
+    <div id="connection" role="status">Connecting to Tigris Dates...</div>
+    <section id="login-section" class="login" hidden>
+      <h1>Owner sign-in</h1>
+      <p>Use your Tigris Dates admin password. Your existing admin session also works here.</p>
+      <form id="login-form">
+        <label for="password">Admin password</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+        <button class="primary" id="login-button" type="submit">Sign in</button>
+      </form>
+    </section>
+    <p id="app-error" role="alert"></p>
+    <button id="reconnect" class="reconnect" type="button" hidden>Reconnect</button>
+    <div id="protected" hidden>
+      <main>
+        <section class="sales" aria-label="Total sales">
+          <div class="sales-heading"><span>TOTAL SALES &middot; ALL TIME</span><button id="refresh" type="button">Refresh</button></div>
+          <div class="sales-row"><span>Current Tigris sales</span><strong id="sales-current">--</strong></div>
+          <div class="sales-row" id="before-row" hidden><span>Before this sale</span><strong id="sales-before">--</strong></div>
+          <div class="sales-row"><span id="sales-after-label">After this sale (projected)</span><strong id="sales-after">--</strong></div>
+          <small id="synced">Not loaded yet</small>
+        </section>
+        <div class="section-heading"><h1>New sale</h1><span>Tap again to add more</span></div>
+        <div class="presets" id="presets"></div>
+        <div class="tools">
+          <button class="text-button" id="undo" type="button" disabled>Undo last tap</button>
+          <button class="text-button" id="clear" type="button" disabled>Clear sale</button>
+        </div>
+        <details>
+          <summary id="order-summary">Order details (0 items)</summary>
+          <div id="order-lines"></div>
+        </details>
+      </main>
+      <footer>
+        <p id="notice" role="status"></p>
+        <div class="subtotal-row"><span>Subtotal <span id="item-count">0 items</span></span><output id="subtotal">$0.00</output></div>
+        <div class="adjustment">
+          <select id="adjustment-type" aria-label="Adjustment type">
+            <option value="discount">Discount (-$)</option>
+            <option value="addition">Addition (+$)</option>
+          </select>
+          <input id="adjustment-amount" type="text" inputmode="decimal" aria-label="Adjustment amount in dollars" aria-describedby="adjustment-error" placeholder="0.00" autocomplete="off">
+        </div>
+        <p id="adjustment-error" role="alert"></p>
+        <div class="total-row" aria-live="polite" aria-atomic="true">
+          <span>Sale total</span><output id="total">$0.00</output>
+        </div>
+        <button class="primary send" id="send" type="button" disabled><span id="send-label">Record walk-in sale</span><span aria-hidden="true">&rarr;</span></button>
+        <p class="footnote">Final walk-in sale (no card charge) &middot; <a href="/admin.html">Open admin</a></p>
+      </footer>
+    </div>
+    <noscript><p class="login">Enable JavaScript to use the register.</p></noscript>
+  </div>
+</body>
+</html>

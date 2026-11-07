@@ -1,0 +1,16 @@
+{
+  "id": "/register/",
+  "name": "Tigris Dates Quick Sale",
+  "short_name": "Tigris Sales",
+  "description": "Tigris Dates walk-in sales register",
+  "start_url": "/register/",
+  "scope": "/register/",
+  "display": "standalone",
+  "background_color": "#faf6ed",
+  "theme_color": "#183d32",
+  "icons": [
+    { "src": "/register/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/register/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/register/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
