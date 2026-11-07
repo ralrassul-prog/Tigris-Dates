@@ -92,29 +92,32 @@
           <button id="financial-retry" class="add" type="button">Retry same saved operation</button>
         </section>
         <div id="financial-data" hidden>
-          <section class="profit-card" aria-label="Estimated net profit">
+          <section class="profit-card" aria-label="Overall profit estimate">
             <div id="profit-label" class="eyebrow">NET PROFIT &middot; ESTIMATE</div>
             <div id="net-profit" class="profit-value">--</div><p id="profit-verdict"></p>
           </section>
           <div class="metrics">
             <div class="metric"><span>Total sales</span><strong id="financial-revenue">--</strong></div>
-            <div class="metric"><span>Net margin</span><strong id="financial-margin">--</strong></div>
+            <div class="metric"><span>Estimated margin</span><strong id="financial-margin">--</strong></div>
           </div>
           <p class="hint">Fully paid orders only. Delivered orders awaiting payment are tracked separately below.</p>
           <p id="cost-warning" class="warning" hidden></p>
           <section class="panel">
             <h2>Where your money goes</h2>
             <div class="row"><span>Sales, after discounts</span><strong id="breakdown-sales"></strong></div>
-            <div class="row"><span>Products &amp; boxes sold</span><strong id="financial-cogs"></strong></div>
+            <div class="row"><span>Mix &amp; Jumbo dates sold</span><strong id="financial-cogs"></strong></div>
             <div class="row"><span>Rent &amp; other expenses</span><strong id="financial-overhead"></strong></div>
             <div class="row"><span>Recorded card fees</span><strong id="financial-fees"></strong></div>
-            <div class="row line"><strong>Estimated net profit</strong><strong id="breakdown-profit"></strong></div>
-            <p class="hint">Paid-order estimate, not bank balance or accrual accounting. Unsold stock is not deducted from profit. Tax, delivery costs, and owner pay are excluded unless recorded as expenses. Existing backend expenses are included; don't add them again.</p>
+            <div class="row line"><strong>Overall profit estimate</strong><strong id="breakdown-profit"></strong></div>
+            <p class="hint">Overall sales less Mix/Jumbo date costs, recorded expenses, and card fees. Honey, boxes, and other product costs are excluded unless recorded as expenses, so this is not complete net profit. Unsold stock is not deducted. Existing backend expenses are included; don't add them again.</p>
           </section>
           <section class="panel">
             <div class="section-heading"><h2>What does 1 lb cost?</h2><button id="edit-costs" class="text-button" type="button">Edit costs</button></div>
             <div id="cost-tiles" class="metrics"></div>
-            <p class="hint">Full cost = dates + inbound freight + box + shared expenses divided across fully paid date pounds. Honey and other products are excluded from date weight.</p>
+            <p class="hint">Date gross profit = paid Mix/Jumbo date sales minus paid pounds sold &times; your cost per pound. Honey and other sales do not inflate this comparison. Expenses are shown separately, not added to your per-pound rate.</p>
+            <div class="row line"><strong>Combined date gross profit</strong><strong id="date-gross-profit"></strong></div>
+            <div class="row"><span>After recorded operating expenses</span><strong id="date-after-expenses"></strong></div>
+            <p class="hint">The second figure subtracts all recorded operating expenses from date gross profit. No automatic allocation to honey or other products.</p>
             <details><summary>See cost details &amp; inventory</summary><div id="cost-details"></div></details>
           </section>
           <section class="panel">
@@ -131,7 +134,7 @@
           <section class="panel">
             <div class="section-heading"><h2>Expenses</h2><button id="add-expense" class="add" type="button">+ Expense</button></div>
             <div id="financial-expenses"></div>
-            <p class="hint">All existing backend expenses are included. Product purchases and boxes belong in Edit costs, not here. If a product purchase is already listed as an expense, correct it in admin before trusting profit to avoid double-counting.</p>
+            <p class="hint">All existing backend expenses are included. Don't add Mix/Jumbo purchases already covered by your per-pound rate. Boxes and other costs can be recorded here if desired. Correct duplicated costs in admin.</p>
           </section>
           <section class="panel">
             <h2>Payments on fully paid orders</h2>

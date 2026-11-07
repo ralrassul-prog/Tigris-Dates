@@ -105,7 +105,7 @@ function renderFinancialData() {
   const data = financialData;
   $("financial-data").hidden = false;
   $("net-profit").textContent = data.settings ? formatMoney(data.netCents) : "Set up costs";
-  $("profit-label").textContent = data.complete ? "NET PROFIT - ESTIMATE" : "PROVISIONAL - COSTS INCOMPLETE";
+  $("profit-label").textContent = data.complete ? "OVERALL PROFIT - ESTIMATE" : "OVERALL ESTIMATE - COSTS EXCLUDED";
   $("profit-verdict").textContent = !data.complete ? "Complete missing costs before trusting this number."
     : data.netCents > 0 ? "You're making money on fully paid orders." : data.netCents < 0 ? "Fully paid orders are running at a loss." : "You're breaking even.";
   $("financial-revenue").textContent = formatMoney(data.revenueCents);
@@ -126,11 +126,17 @@ function renderFinancialData() {
     tile.append(element("h3", "", `${title} / lb`),
       element("strong", "", cost.fullCentsPerPound === null ? "--" : formatMoney(cost.fullCentsPerPound)),
       element("p", "hint", cost.profitCentsPerPound === null ? "Enter costs and record paid sales to calculate."
-        : `Full cost per lb. ${formatMoney(cost.profitCentsPerPound)} profit / lb after shared expenses.`));
+        : `Your cost per lb. ${formatMoney(cost.profitCentsPerPound)} date gross profit / lb sold.`));
+    tile.append(row("Paid pounds sold", String(cost.paidPounds)),
+      row("Date sales", formatMoney(cost.revenueCents)),
+      row("Dates cost", cost.baseCentsPerPound === null ? "--" : formatMoney(Math.round(cost.costCents))),
+      row("Gross profit", cost.grossProfitCents === null ? "--" : formatMoney(cost.grossProfitCents)));
     $("cost-tiles").append(tile);
-    $("cost-details").append(element("p", "hint", `${title}: ${cost.baseCentsPerPound === null ? "costs not configured" : `${formatMoney(cost.baseCentsPerPound)} dates + freight / lb`}. ${cost.paidPounds} lb fully paid; ${cost.pendingPounds} lb delivered, pending payment; ${cost.remainingPounds === null ? "unknown" : cost.remainingPounds} lb remaining.`));
+    $("cost-details").append(element("p", "hint", `${title}: ${cost.baseCentsPerPound === null ? "costs not configured" : `${formatMoney(cost.baseCentsPerPound)} cost / lb`}. ${cost.paidPounds} lb fully paid; ${cost.pendingPounds} lb delivered, pending payment; ${cost.remainingPounds === null ? "unknown" : cost.remainingPounds} lb remaining.`));
   }
-  $("cost-details").append(element("p", "hint", "Cumulative purchased stock includes all-time sold and unsold pounds. Editing costs recalculates historical estimates using an average batch rate. Missing historical item details make inventory incomplete. Shared expenses are allocated entirely to dates for this estimate."));
+  $("cost-details").append(element("p", "hint", "Purchased stock includes all-time sold and unsold pounds. Date gross profit = actual paid date sales after discounts, recorded card fees and delivery charges, minus paid pounds sold x your cost per pound. Boxes, freight, honey, and operating expenses are not added to this rate. Include freight in your rate yourself if desired. Historical sales without product quantities make this comparison and inventory incomplete."));
+  $("date-gross-profit").textContent = data.dateGrossProfitCents === null ? "--" : formatMoney(data.dateGrossProfitCents);
+  $("date-after-expenses").textContent = data.dateProfitAfterExpensesCents === null ? "--" : formatMoney(data.dateProfitAfterExpensesCents);
   $("pending-summary").textContent = `Pending payments (${data.pending.length}) - ${formatMoney(data.pendingBalanceCents)} owed`;
   $("pending-balance").textContent = formatMoney(data.pendingBalanceCents);
   $("pending-collected").textContent = formatMoney(data.pendingReceivedCents);
@@ -213,30 +219,21 @@ function openFinancialForm(kind, title, hint, saveLabel) {
 }
 
 function openCosts() {
-  if (!openFinancialForm("costs", "Product & box costs", "Enter cumulative all-time purchases. Editing costs rerates historical profit estimates; don't also record product purchases as expenses. Zero means a confirmed free cost, not unknown.", "Save & recalculate")) return;
+  if (!openFinancialForm("costs", "Date costs per pound", "Only pounds purchased and your cost per pound for Mix and Jumbo. Editing the rate recalculates historical date profit. Existing date purchase + freight amounts are converted to a per-pound rate; box and honey costs are no longer deducted.", "Save & recalculate")) return;
   const settings = financialData.settings;
   financialCostRevision = financialData.revision;
   for (const kind of ["mix", "jumbo"]) {
     const group = element("fieldset");
     group.append(element("legend", "", `${kind === "mix" ? "Mix" : "Jumbo"} dates - cumulative stock`));
     field(group, `cost-${kind}-pounds`, "Pounds purchased (0 if none)", "number", settings ? settings[kind].pounds : "", "0");
-    field(group, `cost-${kind}-purchase`, "Dates purchase ($)", "number", settings ? (settings[kind].purchaseCents / 100).toFixed(2) : "");
-    field(group, `cost-${kind}-freight`, "Inbound freight ($)", "number", settings ? (settings[kind].freightCents / 100).toFixed(2) : "");
+    field(group, `cost-${kind}-rate`, "Your cost per pound ($)", "number", settings ? settings[kind].costPerPoundCents / 100 : "").step = "any";
     $("financial-fields").append(group);
   }
-  field($("financial-fields"), "cost-box5", "Cost per 5 lb box ($)", "number", settings ? (settings.box5Cents / 100).toFixed(2) : "");
-  field($("financial-fields"), "cost-box10", "Cost per 10 lb box ($)", "number", settings ? (settings.box10Cents / 100).toFixed(2) : "");
-  const unitGroup = element("fieldset"); unitGroup.append(element("legend", "", "Other product cost per unit"));
-  for (const item of financialData.costItems) {
-    const value = settings && Object.hasOwn(settings.unitCosts, item.id) ? (settings.unitCosts[item.id] / 100).toFixed(2) : "";
-    const input = field(unitGroup, `unit-${item.id}`, `${item.name} ($) - blank if unknown`, "number", value, "0", false);
-    input.dataset.productId = item.id;
-  }
-  $("financial-fields").append(unitGroup); $("financial-dialog").showModal();
+  $("financial-dialog").showModal();
 }
 
 function openExpense() {
-  if (!openFinancialForm("expenses", "Add an expense", "One-time operating expense, saved in the existing backend expense list. Product and box purchases belong in Edit costs.", "Add & recalculate")) return;
+  if (!openFinancialForm("expenses", "Add an expense", "One-time operating expense, saved in the existing backend expense list. Don't add date purchases already covered by your per-pound cost.", "Add & recalculate")) return;
   field($("financial-fields"), "expense-name", "Expense name", "text");
   field($("financial-fields"), "expense-amount", "Amount ($)", "number", "", "0.01");
   $("financial-dialog").showModal();
@@ -348,12 +345,9 @@ $("financial-form").onsubmit = async event => {
     let path = `${FINANCIAL_API}/${financialFormKind}`, body = { requestId: crypto.randomUUID() };
     if (financialFormKind === "costs") {
       body.revision = financialCostRevision;
-      body.settings = { unitCosts: {}, box5Cents: dollarsToCents("cost-box5"), box10Cents: dollarsToCents("cost-box10") };
+      body.settings = { version: 2 };
       for (const kind of ["mix", "jumbo"]) body.settings[kind] = { pounds: Number($(`cost-${kind}-pounds`).value),
-        purchaseCents: dollarsToCents(`cost-${kind}-purchase`), freightCents: dollarsToCents(`cost-${kind}-freight`) };
-      for (const input of $("financial-fields").querySelectorAll("[data-product-id]")) {
-        if (input.value !== "") body.settings.unitCosts[input.dataset.productId] = dollarsToCents(input.id);
-      }
+        costPerPoundCents: Number($(`cost-${kind}-rate`).value) * 100 };
     } else if (financialFormKind === "expenses") {
       body.name = $("expense-name").value.trim(); body.amountCents = dollarsToCents("expense-amount");
     } else if (financialFormKind === "payment") {

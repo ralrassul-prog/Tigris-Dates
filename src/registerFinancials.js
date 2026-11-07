@@ -97,12 +97,21 @@ function itemCatalog(db) {
 
 function currentSettings(db) {
   const row = db.prepare("SELECT * FROM register_costs WHERE id = 1").get();
-  return { revision: row ? row.revision : 0, settings: row ? JSON.parse(row.settings_json) : null };
+  const saved = row ? JSON.parse(row.settings_json) : null;
+  if (!saved || saved.version === 2) return { revision: row ? row.revision : 0, settings: saved };
+  const settings = { version: 2 };
+  for (const kind of ["mix", "jumbo"]) {
+    settings[kind] = {
+      pounds: saved[kind].pounds,
+      costPerPoundCents: saved[kind].pounds ? (saved[kind].purchaseCents + saved[kind].freightCents) / saved[kind].pounds : 0
+    };
+  }
+  return { revision: row.revision, settings };
 }
 
 function saveCosts(db, body) {
-  if (!body || typeof body.settings !== "object" || !body.settings) fail("Enter product and packaging costs.");
-  const settings = {};
+  if (!body || typeof body.settings !== "object" || !body.settings) fail("Enter pounds purchased and cost per pound.");
+  const settings = { version: 2 };
   for (const kind of ["mix", "jumbo"]) {
     const input = body.settings[kind];
     if (!input || !Number.isFinite(input.pounds) || input.pounds < 0 || input.pounds > 999999.99) {
@@ -110,22 +119,13 @@ function saveCosts(db, body) {
     }
     settings[kind] = {
       pounds: input.pounds,
-      purchaseCents: cents(input.purchaseCents, `${kind} purchase`),
-      freightCents: cents(input.freightCents, `${kind} freight`)
+      costPerPoundCents: input.costPerPoundCents === undefined
+        ? (cents(input.purchaseCents, `${kind} purchase`) + cents(input.freightCents, `${kind} freight`)) / (input.pounds || 1)
+        : input.costPerPoundCents
     };
-    if (!input.pounds && (input.purchaseCents || input.freightCents)) {
-      fail(`${kind} purchase and freight costs must be zero when no pounds were purchased.`);
+    if (!Number.isFinite(settings[kind].costPerPoundCents) || settings[kind].costPerPoundCents < 0 || settings[kind].costPerPoundCents > MAX_SALE_CENTS) {
+      fail(`Enter a nonnegative cost per pound for ${kind}, up to $999,999.99.`);
     }
-  }
-  settings.box5Cents = cents(body.settings.box5Cents, "5 lb box cost");
-  settings.box10Cents = cents(body.settings.box10Cents, "10 lb box cost");
-  if (!body.settings.unitCosts || typeof body.settings.unitCosts !== "object" || Array.isArray(body.settings.unitCosts)) {
-    fail("Enter per-unit costs for other products.");
-  }
-  settings.unitCosts = {};
-  for (const [key, value] of Object.entries(body.settings.unitCosts)) {
-    if (key.length > 180 || !/^(preset|product):/.test(key)) fail("Invalid product cost key.");
-    settings.unitCosts[key] = cents(value, "Product unit cost");
   }
   return idempotent(db, "costs", body, () => {
     const current = currentSettings(db);
@@ -267,8 +267,8 @@ function getFinancials(db) {
   const overheadCents = db.prepare("SELECT COALESCE(SUM(amount_cents), 0) AS amount FROM expenses").get().amount;
   const feeCents = sales.reduce((sum, sale) => sum + sale.fee, 0);
   const paid = { cashCents: 0, zelleCents: 0 };
-  const dateCosts = { mix: { paidPounds: 0, deliveredPounds: 0, revenueCents: 0, boxesCents: 0 },
-    jumbo: { paidPounds: 0, deliveredPounds: 0, revenueCents: 0, boxesCents: 0 } };
+  const dateCosts = { mix: { paidPounds: 0, deliveredPounds: 0, revenueCents: 0, costCents: 0 },
+    jumbo: { paidPounds: 0, deliveredPounds: 0, revenueCents: 0, costCents: 0 } };
   let cogs = 0, missingSales = 0;
   const missingProducts = new Set();
   function metadata(item) {
@@ -285,23 +285,14 @@ function getFinancials(db) {
         data.paidPounds += product.lbs * item.quantity;
         data.revenueCents += subtotal ? (sale.total - sale.fee - sale.shipping) * item.priceCents * item.quantity / subtotal : 0;
         if (settings && settings[product.kind].pounds > 0) {
-          const rate = (settings[product.kind].purchaseCents + settings[product.kind].freightCents) / settings[product.kind].pounds;
-          const boxes = settings[`box${product.lbs}Cents`] * item.quantity;
-          data.boxesCents += boxes;
-          cogs += rate * product.lbs * item.quantity + boxes;
+          const cost = settings[product.kind].costPerPoundCents * product.lbs * item.quantity;
+          data.costCents += cost;
+          cogs += cost;
         } else missingProducts.add(product.name);
-      } else if (settings && Object.hasOwn(settings.unitCosts, item.id)) {
-        cogs += settings.unitCosts[item.id] * item.quantity;
       } else missingProducts.add(product.name || item.id);
     }
   }
   const open = delivered.filter(order => order.status === "pending");
-  const costItems = catalog.filter(item => item.kind === "unit").map(item => ({ id: item.id, name: item.name }));
-  for (const item of [...sales.flatMap(sale => sale.items), ...open.flatMap(order => order.items)]) {
-    if (!catalog.some(product => product.id === item.id) && !costItems.some(product => product.id === item.id)) {
-      costItems.push({ id: item.id, name: `${item.name || item.id} (historical product)` });
-    }
-  }
   for (const kind of ["mix", "jumbo"]) {
     const data = dateCosts[kind];
     const pendingPounds = open.reduce((sum, order) => sum + order.items.reduce((pounds, item) => {
@@ -311,20 +302,23 @@ function getFinancials(db) {
     data.deliveredPounds = data.paidPounds + pendingPounds;
     data.pendingPounds = pendingPounds;
     data.remainingPounds = settings ? settings[kind].pounds - data.deliveredPounds : null;
-    data.baseCentsPerPound = settings && settings[kind].pounds > 0 ? (settings[kind].purchaseCents + settings[kind].freightCents) / settings[kind].pounds : null;
-    const totalPounds = dateCosts.mix.paidPounds + dateCosts.jumbo.paidPounds;
-    data.fullCentsPerPound = data.baseCentsPerPound !== null && data.paidPounds ? data.baseCentsPerPound + data.boxesCents / data.paidPounds + overheadCents / totalPounds : null;
+    data.baseCentsPerPound = settings && settings[kind].pounds > 0 ? settings[kind].costPerPoundCents : null;
+    data.fullCentsPerPound = data.baseCentsPerPound;
     data.profitCentsPerPound = data.fullCentsPerPound === null ? null : data.revenueCents / data.paidPounds - data.fullCentsPerPound;
+    if (!data.paidPounds) data.profitCentsPerPound = null;
+    data.grossProfitCents = data.baseCentsPerPound === null ? null : Math.round(data.revenueCents - data.costCents);
   }
   const warnings = [];
-  if (!settings) warnings.push("Enter your actual product, freight and box costs before trusting profit estimates.");
-  if (missingProducts.size) warnings.push(`Missing unit costs or product mapping: ${[...missingProducts].join(", ")}.`);
+  if (!settings) warnings.push("Enter pounds purchased and cost per pound for Mix and Jumbo.");
+  if (missingProducts.size) warnings.push(`Overall profit excludes costs for these products: ${[...missingProducts].join(", ")}. Honey and other sales do not enter the Mix/Jumbo gross-profit comparison.`);
   if (missingSales) warnings.push(`${missingSales} historical sale(s) have no product details. Their product costs are excluded, so profit is overstated.`);
   if (Object.values(dateCosts).some(data => data.remainingPounds !== null && data.remainingPounds < 0)) warnings.push("Known delivered pounds exceed recorded purchases. Update cumulative stock costs.");
   const cogsCents = Math.round(cogs);
   return {
     revenueCents, cogsCents, overheadCents, feeCents, netCents: revenueCents - cogsCents - overheadCents - feeCents,
-    paid, dateCosts, warnings, complete: !warnings.length, settings, revision, catalog, costItems,
+    paid, dateCosts, dateGrossProfitCents: settings ? Math.round(dateCosts.mix.revenueCents + dateCosts.jumbo.revenueCents - cogs) : null,
+    dateProfitAfterExpensesCents: settings ? Math.round(dateCosts.mix.revenueCents + dateCosts.jumbo.revenueCents - cogs) - overheadCents : null,
+    warnings, complete: !warnings.length, settings, revision, catalog,
     expenses: db.prepare("SELECT id, name, amount_cents AS amountCents, created_at AS createdAt FROM expenses ORDER BY id DESC").all(),
     pending: open, closed: delivered.filter(order => order.status === "closed").slice(0, 30),
     pendingBalanceCents: open.reduce((sum, order) => sum + order.balanceCents, 0),

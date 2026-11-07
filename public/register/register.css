@@ -125,6 +125,8 @@ a { color: var(--green); }
 .metric span { display: block; font-size: 10px; color: var(--muted); margin-bottom: 5px; }
 .metric strong { font-size: 22px; letter-spacing: -.6px; }
 .metric h3 { margin: 0 0 9px; font-size: 12px; }
+.metric .row { flex-wrap: wrap; font-size: 11px; gap: 4px; }
+.metric .row strong { font-size: 12px; letter-spacing: normal; }
 .panel { background: #fffdf8; border: 1px solid #e2dfd3; border-radius: 13px; padding: 14px; margin: 12px 0; }
 .panel h2 { margin: 0; font-size: 14px; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; margin: 11px 0; }

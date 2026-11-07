@@ -17,9 +17,9 @@ let server, base, cookie;
 const API = "/api/admin/register-financials";
 const reqId = () => crypto.randomUUID();
 const settings = () => ({
-  mix: { pounds: 1000, purchaseCents: 240000, freightCents: 20000 },
-  jumbo: { pounds: 500, purchaseCents: 180000, freightCents: 10000 },
-  box5Cents: 100, box10Cents: 160, unitCosts: { "preset:honey-15": 800 }
+  version: 2,
+  mix: { pounds: 1000, costPerPoundCents: 260 },
+  jumbo: { pounds: 500, costPerPoundCents: 380 }
 });
 async function request(url, body, auth = true, method = body === undefined ? "GET" : "POST") {
   const response = await fetch(`${base}${url}`, {
@@ -68,12 +68,12 @@ test("unconfigured costs and absent sales do not invent profit or divide by zero
   assert.equal(result.data.settings, null);
   assert.equal(result.data.dateCosts.mix.fullCentsPerPound, null);
   assert.equal(result.data.revenueCents, 0);
-  assert.match(result.data.warnings.join(" "), /actual product/);
+  assert.match(result.data.warnings.join(" "), /cost per pound/);
 });
 
 test("a date type with no purchases can be zero without inventing stock or costs", async () => {
   clear();
-  const setup = settings(); setup.jumbo = { pounds: 0, purchaseCents: 0, freightCents: 0 };
+  const setup = settings(); setup.jumbo = { pounds: 0, costPerPoundCents: 0 };
   assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 0, settings: setup })).status, 200);
   let result = (await request(API)).data;
   assert.equal(result.dateCosts.jumbo.remainingPounds, 0);
@@ -103,20 +103,26 @@ test("cash, walk-in, card, other and new Zelle sales reconcile without altering 
   assert.equal((await request("/api/admin/quick-sales", { ...quick(), paymentMethod: "card" })).status, 400);
 });
 
-test("fully paid product costs, freight, boxes, expenses and card fees produce exact profit", async () => {
+test("approved example compares date profit separately from honey and operating expenses", async () => {
   clear(); await setupCosts();
   await request("/api/admin/quick-sales", { ...quick(), items: [{ id: "mix-25", quantity: 40 }, { id: "jumbo-30", quantity: 20 }, { id: "honey-15", quantity: 20 }] });
   await request(`${API}/expenses`, { requestId: reqId(), name: "Rent", amountCents: 30000 });
   await request(`${API}/expenses`, { requestId: reqId(), name: "Utilities", amountCents: 8000 });
   const result = (await request(API)).data;
-  assert.equal(result.complete, true);
+  assert.equal(result.complete, false, "Honey costs are intentionally excluded from the overall estimate");
   assert.equal(result.revenueCents, 190000);
-  assert.equal(result.cogsCents, 112000);
-  assert.equal(result.netCents, 40000);
+  assert.equal(result.cogsCents, 90000);
+  assert.equal(result.netCents, 62000);
+  assert.equal(result.dateGrossProfitCents, 70000);
+  assert.equal(result.dateProfitAfterExpensesCents, 32000);
+  assert.equal(result.dateCosts.mix.grossProfitCents, 48000);
+  assert.equal(result.dateCosts.jumbo.grossProfitCents, 22000);
+  assert.equal(result.dateCosts.mix.profitCentsPerPound, 240);
+  assert.equal(result.dateCosts.jumbo.profitCentsPerPound, 220);
   assert.equal(result.dateCosts.mix.baseCentsPerPound, 260);
   assert.equal(result.dateCosts.mix.remainingPounds, 800);
   assert.equal(result.dateCosts.jumbo.remainingPounds, 400);
-  assert.ok(Math.abs(result.dateCosts.mix.fullCentsPerPound - (260 + 20 + 38000 / 300)) < 0.00001);
+  assert.equal(result.dateCosts.mix.fullCentsPerPound, 260);
 });
 
 test("partial receipts stay separate; final mixed payment closes into backend exactly once", async () => {
@@ -137,7 +143,7 @@ test("partial receipts stay separate; final mixed payment closes into backend ex
   const concurrent = await Promise.all([request(`${API}/delivered/${id}/payments`, final), request(`${API}/delivered/${id}/payments`, final)]);
   assert.deepEqual(concurrent.map(item => item.data.replayed).sort(), [false, true]);
   result = (await request(API)).data;
-  assert.equal(result.revenueCents, 25000); assert.equal(result.netCents, 11200);
+  assert.equal(result.revenueCents, 25000); assert.equal(result.netCents, 12000);
   assert.deepEqual(result.paid, { cashCents: 5000, zelleCents: 20000 });
   assert.equal(result.pending.length, 0); assert.equal(result.closed.length, 1);
   assert.equal(result.dateCosts.mix.remainingPounds, 950, "Closure must not deduct delivered inventory twice");
@@ -159,7 +165,7 @@ test("existing unpaid online order is linked, not duplicated, and keeps installm
   assert.equal((await request(`/api/admin/orders/${id}`, undefined, true, "DELETE")).status, 409);
   await request(`${API}/delivered/${pendingId}/payments`, { requestId: reqId(), amountCents: 2000, paymentMethod: "zelle" });
   const result = (await request(API)).data;
-  assert.equal(result.revenueCents, 3000); assert.equal(result.cogsCents, 2000); assert.equal(result.netCents, 900);
+  assert.equal(result.revenueCents, 3000); assert.equal(result.cogsCents, 1900); assert.equal(result.netCents, 1000);
   assert.deepEqual(result.paid, { cashCents: 1000, zelleCents: 2000 });
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM manual_transactions").get().count, 0);
   assert.equal(db.prepare("SELECT status FROM orders WHERE id = ?").get(id).status, "completed");
@@ -190,7 +196,7 @@ test("cost optimistic concurrency, replay, and pending inventory limits are enfo
   assert.equal((await request(`${API}/costs`, { ...body, requestId: reqId() })).status, 409);
   const low = settings(); low.mix.pounds = 49;
   assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 1, settings: low })).status, 400);
-  const invalid = settings(); invalid.box5Cents = "100";
+  const invalid = settings(); invalid.mix.costPerPoundCents = "100";
   assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 1, settings: invalid })).status, 400);
   assert.equal((await request(API)).data.revision, 1);
 });
@@ -212,21 +218,50 @@ test("legacy quick receipts retain product cost details after migration", async 
     .run(reqId(), txnId, JSON.stringify({ items: [{ id: "mix-25", name: "Mix", quantity: 1, priceCents: 2500 }] }));
   finance.initialize(db);
   const result = (await request(API)).data;
-  assert.equal(result.cogsCents, 1400); assert.equal(result.complete, true);
+  assert.equal(result.cogsCents, 1300); assert.equal(result.complete, true);
   assert.deepEqual(result.paid, { cashCents: 2500, zelleCents: 0 });
 });
 
-test("historical deleted products remain configurable without offering them for new orders", async () => {
+test("historical non-date products remain in sales but not the date profit comparison", async () => {
   clear(); await setupCosts();
   const id = Number(db.prepare("INSERT INTO orders (total_cents, payment_method, status, phone) VALUES (2000, 'cash', 'paid', '')").run().lastInsertRowid);
   db.prepare("INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price_cents, line_total_cents) VALUES (?, 'archived-treat', 'Archived treat', 2, 1000, 2000)").run(id);
   let result = (await request(API)).data;
-  assert.equal(result.costItems.some(item => item.id === "product:archived-treat"), true);
   assert.equal(result.catalog.some(item => item.id === "product:archived-treat"), false);
-  const updated = settings(); updated.unitCosts["product:archived-treat"] = 400;
-  assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 1, settings: updated })).status, 200);
+  assert.equal(result.complete, false); assert.equal(result.cogsCents, 0); assert.equal(result.netCents, 2000);
+  assert.equal(result.dateGrossProfitCents, 0);
+  assert.match(result.warnings.join(" "), /Archived treat/);
+});
+
+test("existing purchase and freight settings convert to rates without modifying saved history", async () => {
+  clear();
+  const legacy = {
+    mix: { pounds: 3, purchaseCents: 1000, freightCents: 100 },
+    jumbo: { pounds: 500, purchaseCents: 180000, freightCents: 10000 },
+    box5Cents: 100, box10Cents: 160, unitCosts: { "preset:honey-15": 800 }
+  };
+  db.prepare("INSERT INTO register_costs (id, settings_json, revision) VALUES (1, ?, 1)").run(JSON.stringify(legacy));
+  let result = (await request(API)).data;
+  assert.equal(result.settings.mix.costPerPoundCents, 1100 / 3);
+  assert.equal(result.settings.jumbo.costPerPoundCents, 380);
+  assert.equal(result.settings.box5Cents, undefined);
+  assert.deepEqual(JSON.parse(db.prepare("SELECT settings_json FROM register_costs").get().settings_json), legacy);
+  assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 1, settings: result.settings })).status, 200);
   result = (await request(API)).data;
-  assert.equal(result.complete, true); assert.equal(result.cogsCents, 800); assert.equal(result.netCents, 1200);
+  assert.equal(result.settings.mix.costPerPoundCents, 1100 / 3, "Saving must not round migrated rates");
+  assert.equal(result.settings.version, 2);
+});
+
+test("old client cost requests remain compatible while ignoring removed box and unit costs", async () => {
+  clear();
+  const legacy = { mix: { pounds: 1000, purchaseCents: 240000, freightCents: 20000 },
+    jumbo: { pounds: 500, purchaseCents: 180000, freightCents: 10000 }, box5Cents: 100, box10Cents: 160, unitCosts: {} };
+  const body = { requestId: reqId(), revision: 0, settings: legacy };
+  assert.equal((await request(`${API}/costs`, body)).status, 200);
+  assert.equal((await request(`${API}/costs`, body)).data.replayed, true);
+  const result = (await request(API)).data;
+  assert.equal(result.settings.mix.costPerPoundCents, 260);
+  assert.equal(result.settings.unitCosts, undefined);
 });
 
 test("schema upgrade makes a pre-financial SQLite backup without changing historical ledger", () => {

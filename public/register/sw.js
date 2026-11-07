@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE = "tigris-register-shell-v2";
+const CACHE = "tigris-register-shell-v3";
 const ASSETS = [
   "/register/",
   "/register/index.html",
