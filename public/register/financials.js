@@ -126,15 +126,15 @@ function renderFinancialData() {
     tile.append(element("h3", "", `${title} / lb`),
       element("strong", "", cost.fullCentsPerPound === null ? "--" : formatMoney(cost.fullCentsPerPound)),
       element("p", "hint", cost.profitCentsPerPound === null ? "Enter costs and record paid sales to calculate."
-        : `Your cost per lb. ${formatMoney(cost.profitCentsPerPound)} date gross profit / lb sold.`));
+        : `Dates + freight + empty box cost per lb. ${formatMoney(cost.profitCentsPerPound)} date gross profit / lb sold.`));
     tile.append(row("Paid pounds sold", String(cost.paidPounds)),
       row("Date sales", formatMoney(cost.revenueCents)),
-      row("Dates cost", cost.baseCentsPerPound === null ? "--" : formatMoney(Math.round(cost.costCents))),
+      row("Dates, freight & boxes", cost.baseCentsPerPound === null ? "--" : formatMoney(Math.round(cost.costCents))),
       row("Gross profit", cost.grossProfitCents === null ? "--" : formatMoney(cost.grossProfitCents)));
     $("cost-tiles").append(tile);
-    $("cost-details").append(element("p", "hint", `${title}: ${cost.baseCentsPerPound === null ? "costs not configured" : `${formatMoney(cost.baseCentsPerPound)} cost / lb`}. ${cost.paidPounds} lb fully paid; ${cost.pendingPounds} lb delivered, pending payment; ${cost.remainingPounds === null ? "unknown" : cost.remainingPounds} lb remaining.`));
+    $("cost-details").append(element("p", "hint", `${title}: ${cost.baseCentsPerPound === null ? "costs not configured" : `${formatMoney(cost.baseCentsPerPound)} dates / lb + ${formatMoney(cost.freightCentsPerPound)} freight / lb; ${formatMoney(cost.boxesCents)} empty boxes on paid sales`}. ${cost.paidPounds} lb fully paid; ${cost.pendingPounds} lb delivered, pending payment; ${cost.remainingPounds === null ? "unknown" : cost.remainingPounds} lb remaining.`));
   }
-  $("cost-details").append(element("p", "hint", "Purchased stock includes all-time sold and unsold pounds. Date gross profit = actual paid date sales after discounts, recorded card fees and delivery charges, minus paid pounds sold x your cost per pound. Boxes, freight, honey, and operating expenses are not added to this rate. Include freight in your rate yourself if desired. Historical sales without product quantities make this comparison and inventory incomplete."));
+  $("cost-details").append(element("p", "hint", "Date gross profit = paid date sales after discounts, recorded card fees and delivery charges, minus paid pounds x (date cost/lb + total inbound freight / purchased pounds), minus empty boxes used on paid sales. Unsold stock and open pending orders are not deducted from profit. Honey and operating expenses are separate. Historical sales without quantities make this comparison incomplete."));
   $("date-gross-profit").textContent = data.dateGrossProfitCents === null ? "--" : formatMoney(data.dateGrossProfitCents);
   $("date-after-expenses").textContent = data.dateProfitAfterExpensesCents === null ? "--" : formatMoney(data.dateProfitAfterExpensesCents);
   $("pending-summary").textContent = `Pending payments (${data.pending.length}) - ${formatMoney(data.pendingBalanceCents)} owed`;
@@ -219,7 +219,7 @@ function openFinancialForm(kind, title, hint, saveLabel) {
 }
 
 function openCosts() {
-  if (!openFinancialForm("costs", "Date costs per pound", "Only pounds purchased and your cost per pound for Mix and Jumbo. Editing the rate recalculates historical date profit. Existing date purchase + freight amounts are converted to a per-pound rate; box and honey costs are no longer deducted.", "Save & recalculate")) return;
+  if (!openFinancialForm("costs", "Date, freight & empty box costs", "Enter date cost per pound excluding separate freight. Freight is the cumulative inbound shipping total for the purchased pounds. If your saved rate already includes freight, leave freight at $0 or subtract it from the rate first. Honey cost remains excluded.", "Save & recalculate")) return;
   const settings = financialData.settings;
   financialCostRevision = financialData.revision;
   for (const kind of ["mix", "jumbo"]) {
@@ -227,8 +227,11 @@ function openCosts() {
     group.append(element("legend", "", `${kind === "mix" ? "Mix" : "Jumbo"} dates - cumulative stock`));
     field(group, `cost-${kind}-pounds`, "Pounds purchased (0 if none)", "number", settings ? settings[kind].pounds : "", "0");
     field(group, `cost-${kind}-rate`, "Your cost per pound ($)", "number", settings ? settings[kind].costPerPoundCents / 100 : "").step = "any";
+    field(group, `cost-${kind}-freight`, "Inbound shipping / freight total ($)", "number", settings ? (settings[kind].freightCents / 100).toFixed(2) : "0");
     $("financial-fields").append(group);
   }
+  field($("financial-fields"), "cost-box5", "Empty 5 lb box cost ($ per box)", "number", settings ? (settings.box5Cents / 100).toFixed(2) : "0");
+  field($("financial-fields"), "cost-box10", "Empty 10 lb box cost ($ per box)", "number", settings ? (settings.box10Cents / 100).toFixed(2) : "0");
   $("financial-dialog").showModal();
 }
 
@@ -345,9 +348,9 @@ $("financial-form").onsubmit = async event => {
     let path = `${FINANCIAL_API}/${financialFormKind}`, body = { requestId: crypto.randomUUID() };
     if (financialFormKind === "costs") {
       body.revision = financialCostRevision;
-      body.settings = { version: 2 };
+      body.settings = { version: 3, box5Cents: dollarsToCents("cost-box5"), box10Cents: dollarsToCents("cost-box10") };
       for (const kind of ["mix", "jumbo"]) body.settings[kind] = { pounds: Number($(`cost-${kind}-pounds`).value),
-        costPerPoundCents: Number($(`cost-${kind}-rate`).value) * 100 };
+        costPerPoundCents: Number($(`cost-${kind}-rate`).value) * 100, freightCents: dollarsToCents(`cost-${kind}-freight`) };
     } else if (financialFormKind === "expenses") {
       body.name = $("expense-name").value.trim(); body.amountCents = dollarsToCents("expense-amount");
     } else if (financialFormKind === "payment") {

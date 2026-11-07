@@ -178,31 +178,36 @@ its existing all-time current and before/after sale totals.
   All other paid sales (including cash, old walk-ins, and card) are grouped
   under Cash as an owner-requested reporting convention. Original online
   payment methods remain unchanged. Cash adjustments are not sales.
-- **Edit costs** has exactly four inputs: cumulative purchased pounds and
-  dollar cost per pound for each of Mix and Jumbo. Zero means a confirmed
-  zero cost or no purchased stock. No sample costs are seeded.
-- Date cost is fully paid pounds sold multiplied by the entered per-pound
-  rate. Editing the rate recalculates historical estimates. Purchase totals,
-  separate freight, 5/10 lb box costs, and honey/unit costs are no longer
-  part of this form or automatically deducted.
-- Existing purchase-plus-freight settings are read as
-  `(purchaseCents + freightCents) / pounds` without rounding the stored rate.
-  Original settings remain unchanged until saved in the new format. Old
-  recovery submissions remain compatible. Prior box/unit costs are excluded.
+- **Edit costs** accepts cumulative purchased pounds, date cost per pound,
+  and cumulative inbound shipping/freight total for each of Mix and Jumbo,
+  plus the amount paid for one empty 5 lb box and one empty 10 lb box.
+  Empty-box costs are packaging only, not the dates inside.
+  Zero means a confirmed zero cost or no purchased stock.
+- Paid date cost is pounds sold multiplied by
+  `(date cost per pound + inbound freight total / purchased pounds)`,
+  plus empty-box unit cost multiplied by the number of paid boxes sold.
+  Editing inputs recalculates historical estimates. Honey/unit costs and
+  date purchase-dollar totals remain excluded from the form.
+- Original purchase/freight settings restore the separate freight and box
+  amounts, converting date purchases alone to a per-pound rate without
+  rounding. Simplified version-2 rates are preserved with separate freight
+  and box costs initially zero, because freight may already be embedded.
+  Do not add freight again unless you first remove it from an inclusive
+  rate. Original saved settings remain unchanged until saved in version 3.
+  Old recovery submissions remain compatible.
 - Each date tile compares actual paid date sales (after discounts, recorded
-  card fees, and delivery charges) against date cost, showing gross profit
+  card fees, and delivery charges) against dates, freight, and boxes, showing gross profit
   and gross profit per pound. Honey and other sales do not inflate this
   comparison. Unsold pounds are not deducted from profit.
 - Combined date gross profit sums Mix and Jumbo gross profit. **After recorded
   operating expenses** subtracts all backend operating expenses from that
   figure, without allocating overhead into the per-pound rate.
-- The overall estimate retains all paid sales, subtracting only Mix/Jumbo
-  date costs, existing backend expenses, and recorded card fees. It excludes
-  honey, boxes, and other product costs unless recorded as expenses, so it
+- The overall estimate retains all paid sales, subtracting Mix/Jumbo dates,
+  inbound freight, empty boxes used, existing expenses, and card fees. It excludes
+  honey and other product costs unless recorded as expenses, so it
   is not complete business net profit. Non-date sales trigger a warning.
-- Existing expenses are included automatically. Don't also expense dates
-  already covered by the per-pound rate. Include freight in your rate yourself
-  if desired, or record it once as an expense. Boxes, honey, rent, utilities,
+- Existing expenses are included automatically. Don't also expense dates,
+  freight, or empty boxes already covered by Edit costs. Honey, rent, utilities,
   delivery, tax, and owner pay can be entered as expenses when applicable.
   Correct duplicated costs in admin; no recurring charges are invented.
 - Missing costs or historical product details explicitly mark profit as
@@ -257,9 +262,10 @@ rates can use fractional cents to preserve migrated average costs:
   completeness warnings, expenses, pending/closed orders, and available
   unpaid online orders.
 - `POST /api/admin/register-financials/costs`: `{requestId, revision, settings}`.
-  Settings use `{version: 2, mix: {pounds, costPerPoundCents},
-  jumbo: {pounds, costPerPoundCents}}`. The previous purchase/freight request
-  format is accepted for saved recovery operations but converted to rates.
+  Settings use `{version: 3, mix: {pounds, costPerPoundCents, freightCents},
+  jumbo: {pounds, costPerPoundCents, freightCents}, box5Cents, box10Cents}`.
+  Previous purchase/freight and version-2 requests remain accepted for
+  recovery operations.
 - `POST /api/admin/register-financials/expenses`:
   `{requestId, name, amountCents}`.
 - `POST /api/admin/register-financials/delivered`:

@@ -98,12 +98,14 @@ function itemCatalog(db) {
 function currentSettings(db) {
   const row = db.prepare("SELECT * FROM register_costs WHERE id = 1").get();
   const saved = row ? JSON.parse(row.settings_json) : null;
-  if (!saved || saved.version === 2) return { revision: row ? row.revision : 0, settings: saved };
-  const settings = { version: 2 };
+  if (!saved || saved.version === 3) return { revision: row ? row.revision : 0, settings: saved };
+  const settings = { version: 3, box5Cents: saved.box5Cents || 0, box10Cents: saved.box10Cents || 0 };
   for (const kind of ["mix", "jumbo"]) {
     settings[kind] = {
       pounds: saved[kind].pounds,
-      costPerPoundCents: saved[kind].pounds ? (saved[kind].purchaseCents + saved[kind].freightCents) / saved[kind].pounds : 0
+      costPerPoundCents: saved.version === 2 ? saved[kind].costPerPoundCents
+        : saved[kind].pounds ? saved[kind].purchaseCents / saved[kind].pounds : 0,
+      freightCents: saved.version === 2 ? 0 : saved[kind].freightCents
     };
   }
   return { revision: row.revision, settings };
@@ -111,7 +113,7 @@ function currentSettings(db) {
 
 function saveCosts(db, body) {
   if (!body || typeof body.settings !== "object" || !body.settings) fail("Enter pounds purchased and cost per pound.");
-  const settings = { version: 2 };
+  const settings = { version: 3 };
   for (const kind of ["mix", "jumbo"]) {
     const input = body.settings[kind];
     if (!input || !Number.isFinite(input.pounds) || input.pounds < 0 || input.pounds > 999999.99) {
@@ -120,13 +122,17 @@ function saveCosts(db, body) {
     settings[kind] = {
       pounds: input.pounds,
       costPerPoundCents: input.costPerPoundCents === undefined
-        ? (cents(input.purchaseCents, `${kind} purchase`) + cents(input.freightCents, `${kind} freight`)) / (input.pounds || 1)
-        : input.costPerPoundCents
+        ? cents(input.purchaseCents, `${kind} purchase`) / (input.pounds || 1)
+        : input.costPerPoundCents,
+      freightCents: cents(input.freightCents === undefined ? 0 : input.freightCents, `${kind} freight`)
     };
     if (!Number.isFinite(settings[kind].costPerPoundCents) || settings[kind].costPerPoundCents < 0 || settings[kind].costPerPoundCents > MAX_SALE_CENTS) {
       fail(`Enter a nonnegative cost per pound for ${kind}, up to $999,999.99.`);
     }
+    if (!input.pounds && settings[kind].freightCents) fail(`${kind} freight requires purchased pounds.`);
   }
+  settings.box5Cents = cents(body.settings.box5Cents === undefined ? 0 : body.settings.box5Cents, "5 lb empty box cost");
+  settings.box10Cents = cents(body.settings.box10Cents === undefined ? 0 : body.settings.box10Cents, "10 lb empty box cost");
   return idempotent(db, "costs", body, () => {
     const current = currentSettings(db);
     if (body.revision !== current.revision) fail("Costs were edited on another device. Refresh before saving again.", 409);
@@ -267,8 +273,8 @@ function getFinancials(db) {
   const overheadCents = db.prepare("SELECT COALESCE(SUM(amount_cents), 0) AS amount FROM expenses").get().amount;
   const feeCents = sales.reduce((sum, sale) => sum + sale.fee, 0);
   const paid = { cashCents: 0, zelleCents: 0 };
-  const dateCosts = { mix: { paidPounds: 0, deliveredPounds: 0, revenueCents: 0, costCents: 0 },
-    jumbo: { paidPounds: 0, deliveredPounds: 0, revenueCents: 0, costCents: 0 } };
+  const dateCosts = { mix: { paidPounds: 0, deliveredPounds: 0, revenueCents: 0, costCents: 0, boxesCents: 0 },
+    jumbo: { paidPounds: 0, deliveredPounds: 0, revenueCents: 0, costCents: 0, boxesCents: 0 } };
   let cogs = 0, missingSales = 0;
   const missingProducts = new Set();
   function metadata(item) {
@@ -285,7 +291,10 @@ function getFinancials(db) {
         data.paidPounds += product.lbs * item.quantity;
         data.revenueCents += subtotal ? (sale.total - sale.fee - sale.shipping) * item.priceCents * item.quantity / subtotal : 0;
         if (settings && settings[product.kind].pounds > 0) {
-          const cost = settings[product.kind].costPerPoundCents * product.lbs * item.quantity;
+          const rate = settings[product.kind].costPerPoundCents + settings[product.kind].freightCents / settings[product.kind].pounds;
+          const boxes = settings[`box${product.lbs}Cents`] * item.quantity;
+          const cost = rate * product.lbs * item.quantity + boxes;
+          data.boxesCents += boxes;
           data.costCents += cost;
           cogs += cost;
         } else missingProducts.add(product.name);
@@ -303,7 +312,9 @@ function getFinancials(db) {
     data.pendingPounds = pendingPounds;
     data.remainingPounds = settings ? settings[kind].pounds - data.deliveredPounds : null;
     data.baseCentsPerPound = settings && settings[kind].pounds > 0 ? settings[kind].costPerPoundCents : null;
-    data.fullCentsPerPound = data.baseCentsPerPound;
+    data.freightCentsPerPound = settings && settings[kind].pounds > 0 ? settings[kind].freightCents / settings[kind].pounds : null;
+    data.fullCentsPerPound = data.baseCentsPerPound === null ? null
+      : data.baseCentsPerPound + data.freightCentsPerPound + (data.paidPounds ? data.boxesCents / data.paidPounds : 0);
     data.profitCentsPerPound = data.fullCentsPerPound === null ? null : data.revenueCents / data.paidPounds - data.fullCentsPerPound;
     if (!data.paidPounds) data.profitCentsPerPound = null;
     data.grossProfitCents = data.baseCentsPerPound === null ? null : Math.round(data.revenueCents - data.costCents);

@@ -105,16 +105,16 @@
           <section class="panel">
             <h2>Where your money goes</h2>
             <div class="row"><span>Sales, after discounts</span><strong id="breakdown-sales"></strong></div>
-            <div class="row"><span>Mix &amp; Jumbo dates sold</span><strong id="financial-cogs"></strong></div>
+            <div class="row"><span>Dates, inbound freight &amp; empty boxes</span><strong id="financial-cogs"></strong></div>
             <div class="row"><span>Rent &amp; other expenses</span><strong id="financial-overhead"></strong></div>
             <div class="row"><span>Recorded card fees</span><strong id="financial-fees"></strong></div>
             <div class="row line"><strong>Overall profit estimate</strong><strong id="breakdown-profit"></strong></div>
-            <p class="hint">Overall sales less Mix/Jumbo date costs, recorded expenses, and card fees. Honey, boxes, and other product costs are excluded unless recorded as expenses, so this is not complete net profit. Unsold stock is not deducted. Existing backend expenses are included; don't add them again.</p>
+            <p class="hint">Overall sales less Mix/Jumbo dates, inbound freight, empty boxes used, recorded expenses, and card fees. Honey and other product costs are excluded unless recorded as expenses, so this is not complete net profit. Unsold stock is not deducted.</p>
           </section>
           <section class="panel">
             <div class="section-heading"><h2>What does 1 lb cost?</h2><button id="edit-costs" class="text-button" type="button">Edit costs</button></div>
             <div id="cost-tiles" class="metrics"></div>
-            <p class="hint">Date gross profit = paid Mix/Jumbo date sales minus paid pounds sold &times; your cost per pound. Honey and other sales do not inflate this comparison. Expenses are shown separately, not added to your per-pound rate.</p>
+            <p class="hint">Date gross profit = paid Mix/Jumbo date sales minus dates, allocated inbound freight, and empty boxes used. Honey and other sales do not inflate this comparison. Operating expenses are shown separately.</p>
             <div class="row line"><strong>Combined date gross profit</strong><strong id="date-gross-profit"></strong></div>
             <div class="row"><span>After recorded operating expenses</span><strong id="date-after-expenses"></strong></div>
             <p class="hint">The second figure subtracts all recorded operating expenses from date gross profit. No automatic allocation to honey or other products.</p>
@@ -134,7 +134,7 @@
           <section class="panel">
             <div class="section-heading"><h2>Expenses</h2><button id="add-expense" class="add" type="button">+ Expense</button></div>
             <div id="financial-expenses"></div>
-            <p class="hint">All existing backend expenses are included. Don't add Mix/Jumbo purchases already covered by your per-pound rate. Boxes and other costs can be recorded here if desired. Correct duplicated costs in admin.</p>
+            <p class="hint">All existing backend expenses are included. Don't also expense dates, freight, or boxes already covered by Edit costs. Correct duplicated costs in admin.</p>
           </section>
           <section class="panel">
             <h2>Payments on fully paid orders</h2>

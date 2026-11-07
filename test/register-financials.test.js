@@ -242,17 +242,18 @@ test("existing purchase and freight settings convert to rates without modifying 
   };
   db.prepare("INSERT INTO register_costs (id, settings_json, revision) VALUES (1, ?, 1)").run(JSON.stringify(legacy));
   let result = (await request(API)).data;
-  assert.equal(result.settings.mix.costPerPoundCents, 1100 / 3);
-  assert.equal(result.settings.jumbo.costPerPoundCents, 380);
-  assert.equal(result.settings.box5Cents, undefined);
+  assert.equal(result.settings.mix.costPerPoundCents, 1000 / 3);
+  assert.equal(result.settings.mix.freightCents, 100);
+  assert.equal(result.settings.jumbo.costPerPoundCents, 360);
+  assert.equal(result.settings.box5Cents, 100);
   assert.deepEqual(JSON.parse(db.prepare("SELECT settings_json FROM register_costs").get().settings_json), legacy);
   assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 1, settings: result.settings })).status, 200);
   result = (await request(API)).data;
-  assert.equal(result.settings.mix.costPerPoundCents, 1100 / 3, "Saving must not round migrated rates");
-  assert.equal(result.settings.version, 2);
+  assert.equal(result.settings.mix.costPerPoundCents, 1000 / 3, "Saving must not round migrated rates");
+  assert.equal(result.settings.version, 3);
 });
 
-test("old client cost requests remain compatible while ignoring removed box and unit costs", async () => {
+test("original cost requests restore separate freight and boxes while keeping honey excluded", async () => {
   clear();
   const legacy = { mix: { pounds: 1000, purchaseCents: 240000, freightCents: 20000 },
     jumbo: { pounds: 500, purchaseCents: 180000, freightCents: 10000 }, box5Cents: 100, box10Cents: 160, unitCosts: {} };
@@ -260,8 +261,46 @@ test("old client cost requests remain compatible while ignoring removed box and 
   assert.equal((await request(`${API}/costs`, body)).status, 200);
   assert.equal((await request(`${API}/costs`, body)).data.replayed, true);
   const result = (await request(API)).data;
-  assert.equal(result.settings.mix.costPerPoundCents, 260);
+  assert.equal(result.settings.mix.costPerPoundCents, 240);
+  assert.equal(result.settings.mix.freightCents, 20000);
+  assert.equal(result.settings.box5Cents, 100);
   assert.equal(result.settings.unitCosts, undefined);
+});
+
+test("simplified saved rates keep embedded freight without adding it twice", async () => {
+  clear();
+  db.prepare("INSERT INTO register_costs (id, settings_json) VALUES (1, ?)").run(JSON.stringify(settings()));
+  const result = (await request(API)).data;
+  assert.equal(result.settings.mix.costPerPoundCents, 260);
+  assert.equal(result.settings.mix.freightCents, 0);
+  assert.equal(result.settings.box5Cents, 0);
+  assert.equal(result.settings.version, 3);
+});
+
+test("freight and empty 5/10 lb boxes enter paid product costs, not unsold stock", async () => {
+  clear();
+  const setup = settings();
+  setup.mix.costPerPoundCents = 240; setup.mix.freightCents = 20000;
+  setup.jumbo.costPerPoundCents = 360; setup.jumbo.freightCents = 10000;
+  setup.box5Cents = 100; setup.box10Cents = 160;
+  assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 0, settings: setup })).status, 200);
+  await request("/api/admin/quick-sales", { ...quick(), items: [{ id: "mix-25", quantity: 2 }, { id: "mix-50", quantity: 1 }, { id: "jumbo-30", quantity: 1 }] });
+  let result = (await request(API)).data;
+  assert.equal(result.cogsCents, 7560);
+  assert.equal(result.dateGrossProfitCents, 5440);
+  assert.equal(result.dateCosts.mix.freightCentsPerPound, 20);
+  assert.equal(result.dateCosts.mix.boxesCents, 360);
+  assert.equal(result.dateCosts.mix.fullCentsPerPound, 278);
+  const id = (await request(`${API}/delivered`, delivered())).data.id;
+  result = (await request(API)).data;
+  assert.equal(result.cogsCents, 7560);
+  await request(`${API}/delivered/${id}/payments`, { requestId: reqId(), amountCents: 25000, paymentMethod: "cash" });
+  result = (await request(API)).data;
+  assert.equal(result.cogsCents, 21360);
+  const invalid = settings(); invalid.mix.freightCents = -1;
+  assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 1, settings: invalid })).status, 400);
+  invalid.mix.freightCents = 0; invalid.box5Cents = 1.5;
+  assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 1, settings: invalid })).status, 400);
 });
 
 test("schema upgrade makes a pre-financial SQLite backup without changing historical ledger", () => {
