@@ -10,6 +10,7 @@ let financialStorageFailed = false;
 let financialFormKind = null;
 let financialPaymentOrder = null;
 let financialCostRevision = 0;
+let financialCountBaseline = {};
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -133,6 +134,9 @@ function renderFinancialData() {
       row("Gross profit", cost.grossProfitCents === null ? "--" : formatMoney(cost.grossProfitCents)));
     $("cost-tiles").append(tile);
     $("cost-details").append(element("p", "hint", `${title}: ${cost.baseCentsPerPound === null ? "costs not configured" : `${formatMoney(cost.baseCentsPerPound)} dates / lb + ${formatMoney(cost.freightCentsPerPound)} freight / lb; ${formatMoney(cost.boxesCents)} empty boxes on paid sales`}. ${cost.paidPounds} lb fully paid; ${cost.pendingPounds} lb delivered, pending payment; ${cost.remainingPounds === null ? "unknown" : cost.remainingPounds} lb remaining.`));
+    if (cost.stockAdjustmentPounds) {
+      $("cost-details").append(element("p", "hint", `${title} stock count adjustment: ${cost.stockAdjustmentPounds > 0 ? "+" : ""}${cost.stockAdjustmentPounds} lb versus purchase/delivery records. This changes stock only, not sales or profit.`));
+    }
   }
   $("cost-details").append(element("p", "hint", "Date gross profit = paid date sales after discounts, recorded card fees and delivery charges, minus paid pounds x (date cost/lb + total inbound freight / purchased pounds), minus empty boxes used on paid sales. Unsold stock and open pending orders are not deducted from profit. Honey and operating expenses are separate. Historical sales without quantities make this comparison incomplete."));
   $("date-gross-profit").textContent = data.dateGrossProfitCents === null ? "--" : formatMoney(data.dateGrossProfitCents);
@@ -222,10 +226,14 @@ function openCosts() {
   if (!openFinancialForm("costs", "Date, freight & empty box costs", "Enter date cost per pound excluding separate freight. Freight is the cumulative inbound shipping total for the purchased pounds. If your saved rate already includes freight, leave freight at $0 or subtract it from the rate first. Honey cost remains excluded.", "Save & recalculate")) return;
   const settings = financialData.settings;
   financialCostRevision = financialData.revision;
+  financialCountBaseline = Object.fromEntries(["mix", "jumbo"].map(kind => [kind, financialData.dateCosts[kind].deliveredPounds]));
   for (const kind of ["mix", "jumbo"]) {
     const group = element("fieldset");
     group.append(element("legend", "", `${kind === "mix" ? "Mix" : "Jumbo"} dates - cumulative stock`));
     field(group, `cost-${kind}-pounds`, "Pounds purchased (0 if none)", "number", settings ? settings[kind].pounds : "", "0");
+    const remaining = financialData.dateCosts[kind].remainingPounds;
+    field(group, `cost-${kind}-unsold`, "Pounds left unsold (actual stock count)", "number", remaining !== null && remaining >= 0 ? remaining : "", "0");
+    group.append(element("p", "hint", "Enter pounds physically still in stock, excluding delivered unpaid orders. Future deliveries reduce this count. Changing it does not create sales or change profit."));
     field(group, `cost-${kind}-rate`, "Your cost per pound ($)", "number", settings ? settings[kind].costPerPoundCents / 100 : "").step = "any";
     field(group, `cost-${kind}-freight`, "Inbound shipping / freight total ($)", "number", settings ? (settings[kind].freightCents / 100).toFixed(2) : "0");
     $("financial-fields").append(group);
@@ -350,7 +358,8 @@ $("financial-form").onsubmit = async event => {
       body.revision = financialCostRevision;
       body.settings = { version: 3, box5Cents: dollarsToCents("cost-box5"), box10Cents: dollarsToCents("cost-box10") };
       for (const kind of ["mix", "jumbo"]) body.settings[kind] = { pounds: Number($(`cost-${kind}-pounds`).value),
-        costPerPoundCents: Number($(`cost-${kind}-rate`).value) * 100, freightCents: dollarsToCents(`cost-${kind}-freight`) };
+        costPerPoundCents: Number($(`cost-${kind}-rate`).value) * 100, freightCents: dollarsToCents(`cost-${kind}-freight`),
+        unsoldPounds: Number($(`cost-${kind}-unsold`).value), expectedDeliveredPounds: financialCountBaseline[kind] };
     } else if (financialFormKind === "expenses") {
       body.name = $("expense-name").value.trim(); body.amountCents = dollarsToCents("expense-amount");
     } else if (financialFormKind === "payment") {

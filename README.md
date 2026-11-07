@@ -181,6 +181,14 @@ its existing all-time current and before/after sale totals.
 - **Edit costs** accepts cumulative purchased pounds, date cost per pound,
   and cumulative inbound shipping/freight total for each of Mix and Jumbo,
   plus the amount paid for one empty 5 lb box and one empty 10 lb box.
+  Each date type also has an editable **Pounds left unsold** actual stock count.
+  It starts from known purchases/deliveries (or the last adjusted count).
+  Enter physically remaining pounds, excluding delivered unpaid orders.
+  A saved adjustment changes inventory only, never creates sales or changes
+  profit. Subsequent deliveries decrease the count; added purchased pounds
+  increase it. Closing an already delivered order does not deduct stock twice.
+  Counts cannot be negative or exceed purchased pounds. A delivery made while
+  the form is open requires a refresh before saving the count.
   Empty-box costs are packaging only, not the dates inside.
   Zero means a confirmed zero cost or no purchased stock.
 - Paid date cost is pounds sold multiplied by
@@ -264,6 +272,11 @@ rates can use fractional cents to preserve migrated average costs:
 - `POST /api/admin/register-financials/costs`: `{requestId, revision, settings}`.
   Settings use `{version: 3, mix: {pounds, costPerPoundCents, freightCents},
   jumbo: {pounds, costPerPoundCents, freightCents}, box5Cents, box10Cents}`.
+  Each date type may include `unsoldPounds` and `expectedDeliveredPounds` to
+  save an actual stock count with a delivery concurrency check. The backend
+  derives and stores `stockAdjustmentPounds`; old clients omitting a count
+  retain the existing adjustment. GET returns adjusted `remainingPounds`
+  and unadjusted `ledgerRemainingPounds` for each date type.
   Previous purchase/freight and version-2 requests remain accepted for
   recovery operations.
 - `POST /api/admin/register-financials/expenses`:

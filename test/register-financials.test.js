@@ -314,6 +314,53 @@ test("schema upgrade makes a pre-financial SQLite backup without changing histor
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM orders").get().count, before);
 });
 
+test("actual stock counts affect inventory only and continue tracking deliveries and purchases", async () => {
+  clear(); await setupCosts();
+  await request("/api/admin/quick-sales", quick());
+  const before = (await request(API)).data;
+  const setup = settings();
+  setup.mix.unsoldPounds = 700.25;
+  setup.mix.expectedDeliveredPounds = 5;
+  setup.jumbo.unsoldPounds = 400;
+  const body = { requestId: reqId(), revision: 1, settings: setup };
+  assert.equal((await request(`${API}/costs`, body)).status, 200);
+  assert.equal((await request(`${API}/costs`, body)).data.replayed, true);
+  let result = (await request(API)).data;
+  assert.equal(result.dateCosts.mix.remainingPounds, 700.25);
+  assert.equal(result.dateCosts.mix.ledgerRemainingPounds, 995);
+  assert.equal(result.netCents, before.netCents);
+  assert.equal(result.revenueCents, before.revenueCents);
+  const id = (await request(`${API}/delivered`, delivered())).data.id;
+  result = (await request(API)).data;
+  assert.equal(result.dateCosts.mix.remainingPounds, 650.25);
+  await request(`${API}/delivered/${id}/payments`, { requestId: reqId(), amountCents: 25000, paymentMethod: "cash" });
+  result = (await request(API)).data;
+  assert.equal(result.dateCosts.mix.remainingPounds, 650.25, "Already delivered stock must not decrease on payment closure");
+  const moreStock = settings(); moreStock.mix.pounds = 1100;
+  assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 2, settings: moreStock })).status, 200);
+  result = (await request(API)).data;
+  assert.equal(result.dateCosts.mix.remainingPounds, 750.25, "Old clients preserve adjustments and purchased stock adds to count");
+  assert.equal(result.dateCosts.jumbo.remainingPounds, 400);
+});
+
+test("stock counts reject invalid values and stale delivery baselines", async () => {
+  clear(); await setupCosts();
+  for (const count of [-1, 1001, "500", null]) {
+    const setup = settings(); setup.mix.unsoldPounds = count;
+    assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 1, settings: setup })).status, 400);
+  }
+  const setup = settings(); setup.mix.unsoldPounds = 500; setup.mix.expectedDeliveredPounds = 0;
+  await request("/api/admin/quick-sales", quick());
+  assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 1, settings: setup })).status, 409);
+  assert.equal((await request(API)).data.revision, 1);
+  setup.mix.expectedDeliveredPounds = 5; setup.mix.unsoldPounds = 0;
+  assert.equal((await request(`${API}/costs`, { requestId: reqId(), revision: 1, settings: setup })).status, 200);
+  await request("/api/admin/quick-sales", quick());
+  const result = (await request(API)).data;
+  assert.equal(result.dateCosts.mix.remainingPounds, -5);
+  assert.match(result.warnings.join(" "), /adjusted stock count/);
+});
+
 test("deleted expenses, deleted closed sales, and reset cannot be resurrected by recovery", async () => {
   clear();
   const expense = { requestId: reqId(), name: "Rent", amountCents: 1000 };

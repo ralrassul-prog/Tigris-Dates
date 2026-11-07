@@ -141,6 +141,19 @@ function saveCosts(db, body) {
       if (settings[kind].pounds < financials.dateCosts[kind].deliveredPounds) {
         fail(`${kind} purchased pounds cannot be less than ${financials.dateCosts[kind].deliveredPounds} known delivered pounds.`);
       }
+      const input = body.settings[kind];
+      const counted = input.unsoldPounds;
+      if (counted !== undefined) {
+        if (!Number.isFinite(counted) || counted < 0 || counted > settings[kind].pounds) {
+          fail(`${kind} pounds left unsold must be between zero and purchased pounds.`);
+        }
+        if (input.expectedDeliveredPounds !== undefined && input.expectedDeliveredPounds !== financials.dateCosts[kind].deliveredPounds) {
+          fail(`${kind} deliveries changed while you were counting stock. Refresh and confirm the current unsold pounds before saving.`, 409);
+        }
+        settings[kind].stockAdjustmentPounds = counted - (settings[kind].pounds - financials.dateCosts[kind].deliveredPounds);
+      } else {
+        settings[kind].stockAdjustmentPounds = current.settings ? current.settings[kind].stockAdjustmentPounds || 0 : 0;
+      }
     }
     db.prepare(`INSERT INTO register_costs (id, settings_json, revision) VALUES (1, ?, 1)
       ON CONFLICT(id) DO UPDATE SET settings_json = excluded.settings_json, revision = register_costs.revision + 1`)
@@ -310,7 +323,9 @@ function getFinancials(db) {
     }, 0), 0);
     data.deliveredPounds = data.paidPounds + pendingPounds;
     data.pendingPounds = pendingPounds;
-    data.remainingPounds = settings ? settings[kind].pounds - data.deliveredPounds : null;
+    data.ledgerRemainingPounds = settings ? settings[kind].pounds - data.deliveredPounds : null;
+    data.stockAdjustmentPounds = settings ? settings[kind].stockAdjustmentPounds || 0 : 0;
+    data.remainingPounds = settings ? Math.round((data.ledgerRemainingPounds + data.stockAdjustmentPounds) * 100000000) / 100000000 : null;
     data.baseCentsPerPound = settings && settings[kind].pounds > 0 ? settings[kind].costPerPoundCents : null;
     data.freightCentsPerPound = settings && settings[kind].pounds > 0 ? settings[kind].freightCents / settings[kind].pounds : null;
     data.fullCentsPerPound = data.baseCentsPerPound === null ? null
@@ -323,7 +338,8 @@ function getFinancials(db) {
   if (!settings) warnings.push("Enter pounds purchased and cost per pound for Mix and Jumbo.");
   if (missingProducts.size) warnings.push(`Overall profit excludes costs for these products: ${[...missingProducts].join(", ")}. Honey and other sales do not enter the Mix/Jumbo gross-profit comparison.`);
   if (missingSales) warnings.push(`${missingSales} historical sale(s) have no product details. Their product costs are excluded, so profit is overstated.`);
-  if (Object.values(dateCosts).some(data => data.remainingPounds !== null && data.remainingPounds < 0)) warnings.push("Known delivered pounds exceed recorded purchases. Update cumulative stock costs.");
+  if (Object.values(dateCosts).some(data => data.ledgerRemainingPounds !== null && data.ledgerRemainingPounds < 0)) warnings.push("Known delivered pounds exceed recorded purchases. Update cumulative stock costs.");
+  else if (Object.values(dateCosts).some(data => data.remainingPounds !== null && data.remainingPounds < 0)) warnings.push("Deliveries exceed your adjusted stock count. Recount unsold pounds or update purchases in Edit costs.");
   const cogsCents = Math.round(cogs);
   return {
     revenueCents, cogsCents, overheadCents, feeCents, netCents: revenueCents - cogsCents - overheadCents - feeCents,
